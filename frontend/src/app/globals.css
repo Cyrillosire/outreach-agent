@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/* Design tokens. Components use the semantic names (bg-surface, text-muted, ...), never raw colors. */
+:root {
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --surface-muted: #f1f3f6;
+  --border: #e3e6eb;
+  --foreground: #161a22;
+  --muted: #5d6676;
+  --accent: #3b5bdb;
+  --accent-foreground: #ffffff;
+  --success: #1f7a4d;
+  --success-bg: #e6f4ec;
+  --warning: #8a5a00;
+  --warning-bg: #fdf3dc;
+  --danger: #b4232f;
+  --danger-bg: #fbe9ea;
+  --info: #2a5bb8;
+  --info-bg: #e8effb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0e1116;
+    --surface: #161a22;
+    --surface-muted: #1d222c;
+    --border: #2a303c;
+    --foreground: #e7eaf0;
+    --muted: #9aa3b2;
+    --accent: #7c94f4;
+    --accent-foreground: #0e1116;
+    --success: #6fd3a0;
+    --success-bg: #12291f;
+    --warning: #f0c060;
+    --warning-bg: #2c2410;
+    --danger: #f2858d;
+    --danger-bg: #301519;
+    --info: #8fb2f2;
+    --info-bg: #142036;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
