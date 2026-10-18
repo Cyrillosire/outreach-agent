@@ -416,6 +416,11 @@ class SourceType(StrEnum):
     PROFESSIONAL_PROFILE = "professional_profile"
     PUBLICATION = "publication"
     GOVERNMENT = "government"
+    # The prospect's own LinkedIn presence, tied to them by the profile URL on their record (never fetched from
+    # linkedin.com: found through search indexes, or captured by a user from their own browser).
+    LINKEDIN_PROFILE = "linkedin_profile"
+    LINKEDIN_POST = "linkedin_post"
+    LINKEDIN_ACTIVITY = "linkedin_activity"
     OTHER = "other"
 
 

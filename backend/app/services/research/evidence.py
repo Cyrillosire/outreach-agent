@@ -21,7 +21,7 @@ CompanyCategory = Literal["overview", "products_services", "markets", "announcem
                           "expansion", "leadership", "priority", "technology", "challenge", "strategy", "procurement",
                           "financial", "other"]
 PersonCategory = Literal["current_role", "responsibilities", "background", "publication", "stated_priority",
-                         "decision_scope", "other"]
+                         "decision_scope", "own_post", "engagement", "other"]
 
 
 class CompanyFactOut(BaseModel):
@@ -83,6 +83,35 @@ def person_prompt(*, full_name: str, company: str | None, max_facts: int = 6) ->
             "scope, professional background, publications, talks or interviews, and publicly stated professional "
             "priorities. Do not infer responsibilities from a job title alone. If the source is about a different "
             "person with the same name, return {\"facts\": []}.\n" + _RULES)
+
+
+_LINKEDIN_KINDS = {
+    "profile": "their LinkedIn profile (headline, about, experience)",
+    "post": "posts and articles they published on LinkedIn",
+    "activity": "their LinkedIn activity feed: their own posts plus posts they commented on, reposted, or reacted to",
+}
+
+
+def linkedin_prompt(*, full_name: str, company: str | None, kind: str, max_facts: int = 8) -> str:
+    """Extraction prompt for the prospect's own LinkedIn presence.
+
+    The profile is linked to this person by the URL on their record, so what it says about them (their headline,
+    role, and their own words) is first-party evidence and needs no outside confirmation. Activity pages also
+    contain OTHER people's posts, so attribution is the main risk handled here.
+    """
+    return (f"You are a careful B2B research analyst. The source below is {_LINKEDIN_KINDS.get(kind, kind)} of "
+            f"{full_name}{f' ({company})' if company else ''}, identified by the profile linked to their record. "
+            f"Extract up to {max_facts} PROFESSIONAL facts useful for a relevant, personal business email:\n"
+            "- current_role: their current title and organization as their profile states it.\n"
+            "- responsibilities / background / stated_priority: as they describe them.\n"
+            "- own_post: something they wrote or shared themselves. The claim states the topic and their view, "
+            "e.g. \"Posted about reducing clinician documentation time, saying ...\".\n"
+            "- engagement: a post by someone else that they commented on, reposted, or reacted to. The claim must "
+            "say which (\"Commented on\", \"Reposted\", \"Reacted to\"), whose post, and its topic. Only their "
+            "comment is their own words; the content of a post they reacted to or reposted is NOT their statement.\n"
+            "Activity feeds mix their content with other people's. Only attribute words to them when the text shows "
+            "they wrote them. Skip purely social items (birthdays, congratulations, job-anniversary likes).\n"
+            + _RULES.replace("a public web page", "the person's LinkedIn page"))
 
 
 def source_block(*, title: str | None, url: str, published: datetime | None, passages: list[str]) -> str:
@@ -269,7 +298,8 @@ def consolidate(candidates: list[Candidate], *, same_threshold: float = 0.6,
 
 _TTL_DAYS = {"announcement": 120, "partnership": 180, "investment": 180, "expansion": 180, "leadership": 180,
              "procurement": 60, "financial": 365, "priority": 180, "strategy": 270, "technology": 270,
-             "challenge": 180, "current_role": 180, "responsibilities": 270, "stated_priority": 180}
+             "challenge": 180, "current_role": 180, "responsibilities": 270, "stated_priority": 180,
+             "own_post": 180, "engagement": 90}
 
 
 def expires_at(category: str, accessed: datetime) -> datetime:
@@ -309,7 +339,8 @@ _COMPANY_GROUPS = {
 _PERSON_GROUPS = {
     "current role confirmed by a source": {"current_role"},
     "responsibilities or decision scope": {"responsibilities", "decision_scope"},
-    "background, publications, or stated priorities": {"background", "publication", "stated_priority"},
+    "background, publications, stated priorities, or LinkedIn activity": {
+        "background", "publication", "stated_priority", "own_post", "engagement"},
 }
 
 

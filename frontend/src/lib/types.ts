@@ -280,6 +280,18 @@ export interface ProspectResearch {
   individual_facts: Fact[];
   company: CompanyResearch | null;
   in_progress: boolean;
+  phase: ResearchPhase;
+  queue_position: number | null;
+}
+
+export type ResearchPhase = "queued" | "researching" | "waiting_for_company" | "finishing" | "idle";
+
+export interface LinkedInCapture {
+  id: string;
+  kind: "profile" | "post" | "activity";
+  url: string;
+  characters: number;
+  captured_at: string;
 }
 
 export interface ResearchOverview {

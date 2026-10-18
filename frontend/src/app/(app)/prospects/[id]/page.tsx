@@ -7,8 +7,9 @@ import { ResearchActions } from "@/components/research-actions";
 import { Badge, Card, EmptyState, Notice, PageHeader } from "@/components/ui";
 import { serverFetchOrNull } from "@/lib/api-server";
 import { formatDate, RESEARCH_LABELS } from "@/lib/labels";
-import type { ProspectDetail, ProspectResearch } from "@/lib/types";
+import type { LinkedInCapture, ProspectDetail, ProspectResearch } from "@/lib/types";
 
+import { LinkedInCaptures } from "./linkedin-captures";
 import { DeleteProspectButton, EditProspect, SuppressForm } from "./prospect-actions";
 
 export const metadata: Metadata = { title: "Prospect" };
@@ -25,9 +26,10 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export default async function ProspectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const [p, r] = await Promise.all([
+  const [p, r, captures] = await Promise.all([
     serverFetchOrNull<ProspectDetail>(`/prospects/${id}`),
     serverFetchOrNull<ProspectResearch>(`/prospects/${id}/research`),
+    serverFetchOrNull<LinkedInCapture[]>(`/prospects/${id}/linkedin-captures`),
   ]);
   if (!p || !r) notFound();
 
@@ -96,7 +98,8 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
                 <Badge tone={research.tone}>{research.label}</Badge>
                 {r.outcome_reason ? <p className="mt-2 text-sm text-muted">{r.outcome_reason}</p> : null}
               </div>
-              <ResearchActions prospectId={p.id} inProgress={r.in_progress}
+              <ResearchActions prospectId={p.id} phase={r.phase} queuePosition={r.queue_position}
+                               companyName={r.company?.name ?? null}
                                hasResearch={Boolean(r.individual_run || r.company?.latest_run)} />
             </div>
             {missing.length ? (
@@ -126,6 +129,8 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
             ) : null}
           </Card>
 
+          <LinkedInCaptures prospectId={p.id} linkedinUrl={p.linkedin_url} captures={captures} />
+
           <Card title="Drafts, messages and scheduled actions">
             {p.drafts.length + p.messages.length + p.scheduled_actions.length === 0 ? (
               <EmptyState title="Nothing yet">
@@ -133,7 +138,12 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
               </EmptyState>
             ) : (
               <ul className="space-y-1 text-sm">
-                {p.drafts.map((d) => <li key={d.id}>Draft v{d.version}: {d.subject} <Badge>{d.status}</Badge></li>)}
+                {p.drafts.map((d) => (
+                  <li key={d.id}>
+                    <Link href={`/drafts/${d.id}`} className="hover:underline">Draft v{d.version}: {d.subject}</Link>{" "}
+                    <Badge>{d.status.replace("_", " ")}</Badge>
+                  </li>
+                ))}
                 {p.messages.map((m) => <li key={m.id}>{m.direction} message: {m.subject ?? "(no subject)"}</li>)}
                 {p.scheduled_actions.map((a) => <li key={a.id}>{a.action_type} due {formatDate(a.due_at)} <Badge>{a.state}</Badge></li>)}
               </ul>

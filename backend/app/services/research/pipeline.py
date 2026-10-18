@@ -8,6 +8,7 @@ Budgets (queries, sources, wall time) are configurable; when evidence stays thin
 from __future__ import annotations
 
 import asyncio
+import functools
 import re
 import time
 import uuid
@@ -29,7 +30,7 @@ from app.integrations.web.fetcher import WebFetcher
 from app.integrations.web.urls import host_of, is_blocked_domain, normalize_url, same_site
 from app.jobs.worker import JobContext, PermanentJobError, RetryableJobError
 from app.models import Company, Prospect
-from app.services.research import store
+from app.services.research import linkedin, store
 from app.services.research.evidence import (
     Candidate,
     CompanyFacts,
@@ -39,6 +40,7 @@ from app.services.research.evidence import (
     consolidate,
     excerpt_supported,
     is_sensitive_person_fact,
+    linkedin_prompt,
     normalize_for_match,
     person_prompt,
     person_sufficiency,
@@ -82,6 +84,8 @@ class Page:
     text: str
     published_at: datetime | None
     links: list[tuple[str, str]]
+    # LinkedIn kind ("profile", "post", "activity") for the prospect's own LinkedIn text, else None.
+    linkedin: str | None = None
 
 
 class Budget:
@@ -231,13 +235,60 @@ def mentions_person(text: str, full_name: str, company_name: str | None, domain:
     return any(normalize_for_match(a) in norm for a in anchors) if anchors else False
 
 
+async def collect_linkedin(ctx: JobContext, svc: ResearchServices, prospect: Prospect,
+                           notes: list[str]) -> dict[str, tuple[Page, uuid.UUID]]:
+    """The prospect's own LinkedIn: user captures plus search-index results for their profile URL.
+
+    linkedin.com is never fetched. Identity is the profile slug on the prospect's record, so these pages skip the
+    namesake guard that ordinary web pages need.
+    """
+    pages: dict[str, tuple[Page, uuid.UUID]] = {}
+    for src in await ctx.db(lambda s: store.captured_sources(s, prospect.id)):
+        kind = src.source_type.value.removeprefix("linkedin_")
+        for n, part in enumerate(linkedin.chunks(src.extracted_text or "")):
+            key = f"capture:{src.id}:{n}"
+            pages[key] = (Page(key, src.url, "linkedin.com", src.title, part, None, [], linkedin=kind), src.id)
+
+    slug = linkedin.profile_slug(prospect.linkedin_url)
+    if prospect.linkedin_url and slug is None:
+        notes.append("The LinkedIn URL on file isn't a personal profile link (linkedin.com/in/...).")
+    if slug is None or not svc.search.configured or svc.settings.research_linkedin_max_queries == 0:
+        return pages
+    queries = linkedin.search_queries(prospect.full_name or "", slug)[: svc.settings.research_linkedin_max_queries]
+    found: dict[str, tuple[linkedin.LinkedInKind, str, str]] = {}  # normalized url -> (kind, url, text)
+    for q in queries:
+        try:
+            for r in await svc.search.search(q, max_results=8):
+                kind = linkedin.classify_result(r.url, slug)
+                norm = safe_key(r.url)
+                text = linkedin.result_text(r.title, r.snippet)
+                if kind and norm and norm not in found and text:
+                    found[norm] = (kind, r.url, text)
+        except SearchUnavailable as exc:
+            notes.append(f"LinkedIn lookup unavailable: {exc}")
+            break
+
+    def save(s: Any, norm: str, kind: linkedin.LinkedInKind, url: str, text: str) -> uuid.UUID:
+        return store.save_source(s, workspace_id=prospect.workspace_id, url=url, url_normalized=norm,
+                                 title=text.split("\n")[0][:300], text=text, published_at=None, http_status=None,
+                                 source_type=linkedin.SOURCE_TYPES[kind], publisher="linkedin.com (search index)")
+
+    for norm, (kind, url, text) in found.items():
+        sid = await ctx.db(functools.partial(save, norm=norm, kind=kind, url=url, text=text))
+        pages[norm] = (Page(norm, url, "linkedin.com", text.split("\n")[0], text, None, [], linkedin=kind), sid)
+    if not found:
+        notes.append("No indexed LinkedIn profile or posts found for the profile on file; add a capture for more.")
+    sources_total.labels("prospect", "linkedin").inc(len(pages))
+    return pages
+
+
 async def collect_person_pages(ctx: JobContext, svc: ResearchServices, prospect: Prospect, company: Company | None,
                                notes: list[str]) -> list[tuple[Page, uuid.UUID]]:
     settings = svc.settings
     full_name = prospect.full_name or ""
     company_name = company.name if company else None
     domain = company.normalized_domain if company else None
-    pages: dict[str, tuple[Page, uuid.UUID]] = {}
+    pages: dict[str, tuple[Page, uuid.UUID]] = await collect_linkedin(ctx, svc, prospect, notes)
 
     if domain:  # pages already collected from the company's own site that name this person
         for src in await ctx.db(lambda s: store.sources_mentioning(s, ctx.job.workspace_id, host_suffix=domain,  # type: ignore[arg-type]
@@ -245,7 +296,10 @@ async def collect_person_pages(ctx: JobContext, svc: ResearchServices, prospect:
             pages[src.url_normalized] = (Page(src.url_normalized, src.url, host_of(src.url), src.title,
                                               src.extracted_text or "", src.published_at, []), src.id)
 
-    if domain and not pages:
+    def web_count() -> int:  # LinkedIn evidence doesn't use up the web-page budget
+        return sum(1 for p, _ in pages.values() if p.linkedin is None)
+
+    if domain and not web_count():
         # Company and individual research run concurrently, so the company's people pages may not be cached yet.
         links = await company_site_links(ctx, svc, domain)
         people_pages = list(dict.fromkeys(
@@ -274,7 +328,7 @@ async def collect_person_pages(ctx: JobContext, svc: ResearchServices, prospect:
                     raise RetryableJobError(f"search unavailable: {exc}", retry_after_seconds=exc.retry_after) from exc
                 notes.append(f"Web search unavailable: {exc}")
                 break
-        remaining = max(0, settings.research_person_max_sources - len(pages))
+        remaining = max(0, settings.research_person_max_sources - web_count())
         for page, sid in await asyncio.gather(*(load_page(ctx, svc, u, company_domain=domain)
                                                 for u in list(dict.fromkeys(urls))[:remaining])):
             if page and sid:
@@ -302,15 +356,22 @@ async def extract_company(svc: ResearchServices, page: Page, company: Company) -
 async def extract_person(svc: ResearchServices, page: Page, prospect: Prospect,
                          company: Company | None) -> list[Candidate]:
     full_name = prospect.full_name or ""
-    surname = full_name.split()[-1] if full_name.split() else full_name
-    passages = select_passages(page.text, keywords=[full_name, prospect.title or "", company.name if company else ""],
-                               must_mention=[surname])
+    company_name = company.name if company else None
+    if page.linkedin:
+        # Their own LinkedIn text: every part may matter (posts rarely repeat their name), and it is already chunked.
+        passages = [page.text] if page.text.strip() else []
+        system = linkedin_prompt(full_name=full_name, company=company_name, kind=page.linkedin)
+    else:
+        surname = full_name.split()[-1] if full_name.split() else full_name
+        passages = select_passages(page.text, keywords=[full_name, prospect.title or "", company_name or ""],
+                                   must_mention=[surname])
+        system = person_prompt(full_name=full_name, company=company_name)
     if not passages:
         return []
     result, _ = await svc.llm.complete(
-        task="extract", system=person_prompt(full_name=full_name, company=company.name if company else None),
+        task="extract", system=system,
         user=source_block(title=page.title, url=page.url, published=page.published_at, passages=passages),
-        output=PersonFacts, max_tokens=800)
+        output=PersonFacts, max_tokens=1000 if page.linkedin else 800)
     return _accept(result.facts, passages, page, subject="prospect")
 
 

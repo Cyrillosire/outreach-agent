@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.domain.states import (
     FactKind,
@@ -99,6 +99,8 @@ class ProspectResearchOut(BaseModel):
     individual_facts: list[FactOut]
     company: CompanyResearchOut | None
     in_progress: bool
+    phase: Literal["queued", "researching", "waiting_for_company", "finishing", "idle"]
+    queue_position: int | None = Field(default=None, description="Research jobs ahead of this one in the queue")
 
 
 class RecentRunOut(RunOut):

@@ -91,6 +91,10 @@ class ResearchSource(UUIDPrimaryKey, Timestamps, WorkspaceScoped, Base):
     content_sha256: Mapped[str | None] = mapped_column(String(64))
     # Extracted plain text (untrusted). Never interpreted as instructions.
     extracted_text: Mapped[str | None] = mapped_column(Text)
+    # Set for text a user captured for one prospect (e.g. their LinkedIn activity); deleted with the prospect.
+    captured_for_prospect_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("prospects.id", ondelete="CASCADE"), index=True
+    )
 
 
 class ResearchFact(UUIDPrimaryKey, Timestamps, WorkspaceScoped, Base):

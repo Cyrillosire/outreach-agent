@@ -36,6 +36,7 @@ from app.services.research.evidence import (
     person_sufficiency,
     prospect_outcome,
 )
+from app.services.research.linkedin import SOURCE_TYPES, LinkedInKind, clean_capture
 
 log = get_logger(__name__)
 COMPANY_JOB = "research.company"
@@ -169,15 +170,15 @@ def classify_source(url: str, host: str, company_domain: str | None) -> SourceTy
 
 
 def save_source(db: Session, *, workspace_id: uuid.UUID, url: str, url_normalized: str, title: str | None,
-                text: str, published_at: datetime | None, http_status: int, source_type: SourceType,
-                publisher: str | None) -> uuid.UUID:
+                text: str, published_at: datetime | None, http_status: int | None, source_type: SourceType,
+                publisher: str | None, captured_for_prospect_id: uuid.UUID | None = None) -> uuid.UUID:
     digest = hashlib.sha256(text.encode()).hexdigest()
     now = datetime.now(UTC)
     inserted = db.execute(pg_insert(ResearchSource).values(
         id=uuid.uuid4(), workspace_id=workspace_id, url=url[:2048], url_normalized=url_normalized[:2048],
         title=(title or "")[:1000] or None, publisher=publisher, source_type=source_type, published_at=published_at,
         accessed_at=now, http_status=http_status, extraction_status=ExtractionStatus.EXTRACTED,
-        content_sha256=digest, extracted_text=text,
+        content_sha256=digest, extracted_text=text, captured_for_prospect_id=captured_for_prospect_id,
     ).on_conflict_do_nothing(index_elements=["workspace_id", "url_normalized", "content_sha256"])
         .returning(ResearchSource.id)).scalar_one_or_none()
     if inserted is not None:
@@ -188,6 +189,42 @@ def save_source(db: Session, *, workspace_id: uuid.UUID, url: str, url_normalize
     assert existing is not None
     existing.accessed_at = now  # same content re-confirmed today
     return existing.id
+
+
+def captured_sources(db: Session, prospect_id: uuid.UUID) -> list[ResearchSource]:
+    """Text users captured for this prospect (LinkedIn profile, posts, activity), newest first."""
+    return list(db.scalars(select(ResearchSource).where(ResearchSource.captured_for_prospect_id == prospect_id)
+                           .order_by(ResearchSource.accessed_at.desc())).all())
+
+
+def save_capture(db: Session, *, prospect: Prospect, kind: LinkedInKind, text: str, url: str | None) -> uuid.UUID:
+    """Store pasted LinkedIn text as a source owned by this prospect. The key is per prospect and kind, so two
+    contacts never share a capture and re-pasting identical text is a no-op."""
+    cleaned = clean_capture(text)
+    page_url = url or prospect.linkedin_url or "https://www.linkedin.com/"
+    titles = {"profile": "LinkedIn profile", "post": "LinkedIn posts", "activity": "LinkedIn activity"}
+    return save_source(db, workspace_id=prospect.workspace_id, url=page_url,
+                       url_normalized=f"capture:{prospect.id}:{kind}", title=f"{titles[kind]} (captured)",
+                       text=cleaned, published_at=None, http_status=None, source_type=SOURCE_TYPES[kind],
+                       publisher="linkedin.com (captured by user)", captured_for_prospect_id=prospect.id)
+
+
+def delete_capture(db: Session, *, prospect: Prospect, source_id: uuid.UUID) -> int:
+    """Remove a capture and every fact that rested only on it (drafts citing those facts are superseded)."""
+    src = db.scalar(select(ResearchSource).where(ResearchSource.id == source_id,
+                                                 ResearchSource.captured_for_prospect_id == prospect.id))
+    if src is None:
+        return 0
+    fact_ids = list(db.scalars(select(ResearchFactEvidence.fact_id).where(ResearchFactEvidence.source_id == src.id)))
+    db.delete(src)
+    db.flush()
+    orphaned = [fid for fid in fact_ids if not db.scalar(
+        select(ResearchFactEvidence.id).where(ResearchFactEvidence.fact_id == fid).limit(1))]
+    if orphaned:
+        from app.services.records import supersede_drafts_citing
+        supersede_drafts_citing(db, orphaned, "A LinkedIn capture this draft relied on was removed.")
+        db.execute(update(ResearchFact).where(ResearchFact.id.in_(orphaned)).values(expires_at=datetime.now(UTC)))
+    return len(orphaned)
 
 
 def sources_mentioning(db: Session, workspace_id: uuid.UUID, *, host_suffix: str, phrase: str,
@@ -274,7 +311,11 @@ def finalize_prospect(db: Session, prospect_id: uuid.UUID) -> str | None:
     if person_run is None or person_run.status in (ResearchRunStatus.QUEUED, ResearchRunStatus.RUNNING):
         return None
     company = db.scalar(select(Company).where(Company.id == prospect.company_id)) if prospect.company_id else None
-    if company is not None and company.research_status in _IN_PROGRESS:
+    if company is not None and company.research_status in _IN_PROGRESS and db.scalar(
+            select(Job.id).where(Job.dedupe_key == company_job_key(company.id), Job.state.in_(JOB_ACTIVE))):
+        # Wait for the company job. It writes its final status in the same transaction as its facts (before its job
+        # row is marked done), so a company still "in progress" with NO active job was abandoned (cancelled, or a
+        # status left over from an older run): decide from the company facts that exist instead of waiting forever.
         return None
 
     if person_run.status is ResearchRunStatus.FAILED or (

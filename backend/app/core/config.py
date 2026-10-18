@@ -91,6 +91,8 @@ class Settings(BaseSettings):
     research_company_freshness_days: int = Field(default=30, ge=0)
     research_company_max_queries: int = Field(default=3, ge=0, le=20)
     research_person_max_queries: int = Field(default=3, ge=0, le=20)
+    # Search-index lookups for the prospect's LinkedIn profile and posts (linkedin.com itself is never fetched).
+    research_linkedin_max_queries: int = Field(default=3, ge=0, le=10)
     research_company_max_sources: int = Field(default=8, ge=1, le=50)
     research_person_max_sources: int = Field(default=6, ge=1, le=50)
     research_time_budget_seconds: int = Field(default=900, ge=30)

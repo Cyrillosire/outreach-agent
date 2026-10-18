@@ -61,6 +61,17 @@ Status legend: ✅ implemented and tested · 🟡 partially implemented · ⬜ p
   data on the machine.
 - ✅ API keys only in `.env`/secrets; never logged (structlog redaction), never sent to the frontend
 
+## LinkedIn data
+- ✅ No automated access to LinkedIn: the app never signs in to, fetches, or scrapes linkedin.com (domain stays on
+  the fetcher's block list). Profile and post data comes from search-engine indexes or from text a user copies from
+  their own browser.
+- ✅ Captured activity is scoped to one prospect, deleted with them, and removable on its own (dependent facts
+  expire and drafts citing them are superseded)
+- ✅ Sensitive attributes (health, religion, politics, family, …) are filtered from LinkedIn text like any source;
+  drafts never reference someone's likes or reposts
+- ⬜ Operator: activity data is personal data. Cover LinkedIn-derived profiling in your legitimate-interest
+  assessment and privacy notice, and honour deletion requests (deleting the prospect removes it)
+
 ## Drafting safety (M4)
 - ✅ Nothing is sent or approved by AI. Approval is a human action bound to the exact content hash; any edit or
   regeneration creates a new version without approval (tested)

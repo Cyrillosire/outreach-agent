@@ -6,16 +6,38 @@ import { useEffect, useState } from "react";
 import { buttonClass } from "@/components/ui";
 import { apiFetch } from "@/lib/api-client";
 import { ApiError } from "@/lib/envelope";
+import type { ResearchPhase } from "@/lib/types";
 
-/** Start/refresh research for one prospect, and keep the page fresh while research is running. */
-export function ResearchActions({ prospectId, inProgress, hasResearch }: {
+function phaseText(phase: ResearchPhase, position: number | null, companyName: string | null): string {
+  switch (phase) {
+    case "queued":
+      return position ? `Queued: ${position} research job(s) ahead.` : "Queued: starting next.";
+    case "researching":
+      return "Researching this person now.";
+    case "waiting_for_company":
+      return `Person research done; finishing research on ${companyName ?? "their company"}.`;
+    case "finishing":
+      return "Saving results.";
+    default:
+      return "";
+  }
+}
+
+/**
+ * Start/refresh research for one prospect. While the queue is working on it (from job state, not the stored
+ * status) the page refreshes itself, and stops as soon as the work is done.
+ */
+export function ResearchActions({ prospectId, phase, queuePosition, companyName, hasResearch }: {
   prospectId: string;
-  inProgress: boolean;
+  phase: ResearchPhase;
+  queuePosition: number | null;
+  companyName: string | null;
   hasResearch: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inProgress = phase !== "idle";
 
   useEffect(() => {
     if (!inProgress) return;
@@ -37,7 +59,11 @@ export function ResearchActions({ prospectId, inProgress, hasResearch }: {
   }
 
   if (inProgress) {
-    return <span className="text-xs text-muted">Researching… this page refreshes automatically.</span>;
+    return (
+      <span className="max-w-xs text-right text-xs text-muted" role="status">
+        {phaseText(phase, queuePosition, companyName)} This page updates automatically.
+      </span>
+    );
   }
   return (
     <div className="flex flex-col items-end gap-1">

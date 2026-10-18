@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import Conflict, NotFound
-from app.domain.states import JOB_ACTIVE, ResearchRunStatus, ResearchStatus, ResearchSubject
+from app.domain.states import JOB_ACTIVE, JobState, ResearchRunStatus, ResearchStatus, ResearchSubject
 from app.jobs import queue
 from app.models import (
     Company,
@@ -35,8 +35,33 @@ from app.schemas.research import (
 )
 from app.services.research import store
 
-_IN_PROGRESS = {ResearchStatus.PENDING, ResearchStatus.RESEARCHING_COMPANY, ResearchStatus.RESEARCHING_INDIVIDUAL,
-                ResearchStatus.VERIFYING}
+_WORKING = {ResearchStatus.RESEARCHING_COMPANY, ResearchStatus.RESEARCHING_INDIVIDUAL, ResearchStatus.VERIFYING}
+
+
+def research_phase(db: Session, prospect: Prospect) -> tuple[str, int | None]:
+    """What the queue is doing for this prospect right now, from job state rather than the stored status.
+
+    Returns (phase, queue position). Phases: queued, researching, waiting_for_company, finishing, idle.
+    A prospect that was never queued is idle, so the UI offers "Start research" instead of a spinner.
+    """
+    keys = [store.prospect_job_key(prospect.id)]
+    if prospect.company_id:
+        keys.append(store.company_job_key(prospect.company_id))
+    active = {j.dedupe_key: j for j in db.scalars(select(Job).where(Job.dedupe_key.in_(keys),
+                                                                     Job.state.in_(JOB_ACTIVE))).all()}
+    mine, company_job = active.get(keys[0]), active.get(keys[1]) if len(keys) > 1 else None
+    if mine is not None and mine.state is JobState.RUNNING:
+        return "researching", None
+    if mine is not None:
+        ahead = db.scalar(select(func.count()).select_from(Job).where(
+            Job.workspace_id == prospect.workspace_id, Job.kind.like("research.%"), Job.state == mine.state,
+            Job.created_at < mine.created_at)) or 0
+        return "queued", ahead
+    if company_job is not None:
+        return "waiting_for_company", None
+    if prospect.research_status in _WORKING:
+        return "finishing", None  # results saved; finalization (or the reconciler) completes it shortly
+    return "idle", None
 
 
 def facts_for(db: Session, *, company_id: uuid.UUID | None = None,
@@ -82,12 +107,13 @@ def prospect_research(db: Session, user: User, prospect_id: uuid.UUID) -> Prospe
     run = _latest_run(db, prospect_id=prospect.id)
     company = db.get(Company, prospect.company_id) if prospect.company_id else None
     reason = (run.sufficiency or {}).get("reason") if run and run.sufficiency else None
+    phase, position = research_phase(db, prospect)
     return ProspectResearchOut(
         prospect_id=prospect.id, research_status=prospect.research_status, outcome_reason=reason,
         individual_run=RunOut.model_validate(run) if run else None,
         individual_facts=facts_for(db, prospect_id=prospect.id),
         company=company_research(db, company) if company else None,
-        in_progress=prospect.research_status in _IN_PROGRESS)
+        in_progress=phase != "idle", phase=phase, queue_position=position)
 
 
 def run_detail(db: Session, user: User, run_id: uuid.UUID) -> RunDetailOut:

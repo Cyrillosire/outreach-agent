@@ -1,13 +1,17 @@
 """Web search providers behind one interface, plus a caching, quota-aware router.
 
-Search results are *leads*, not evidence: snippets are never stored as facts. Every claim must come from a
-page the fetcher retrieved itself, so its excerpt can be verified verbatim.
+Search results are *leads*, not evidence: every claim must come from a page the fetcher retrieved itself, so its
+excerpt can be verified verbatim. The one exception is the prospect's own LinkedIn profile and posts, which are
+never fetched (LinkedIn's terms); there the indexed title and snippet are the source text, matched to the person by
+the profile URL on their record (see services/research/linkedin.py).
 """
 
 from __future__ import annotations
 
 import hashlib
+import html
 import json
+import re
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
@@ -19,6 +23,7 @@ from app.core.metrics import registry
 from app.integrations import http
 
 log = get_logger(__name__)
+SNIPPET_CHARS = 1500
 search_requests_total = Counter("search_requests_total", "Search API calls", ["provider", "outcome"],
                                 registry=registry)
 
@@ -54,7 +59,7 @@ class TavilySearch:
             quota_statuses=frozenset({402, 432, 433}),
             json={"query": query, "max_results": min(max_results, 20), "search_depth": "basic",
                   "include_answer": False, "include_raw_content": False, "include_images": False})
-        return [SearchResult(url=r["url"], title=r.get("title") or "", snippet=(r.get("content") or "")[:500],
+        return [SearchResult(url=r["url"], title=r.get("title") or "", snippet=(r.get("content") or "")[:SNIPPET_CHARS],
                              provider=self.name, rank=i, published=r.get("published_date"))
                 for i, r in enumerate(response.json().get("results") or []) if r.get("url")]
 
@@ -71,11 +76,19 @@ class BraveSearch:
     async def search(self, query: str, *, max_results: int) -> list[SearchResult]:
         response = await http.request(
             self._client, "GET", "/res/v1/web/search", provider=self.name, headers=self._headers,
-            quota_statuses=frozenset({402}), params={"q": query, "count": min(max_results, 20)})
+            quota_statuses=frozenset({402}),
+            params={"q": query, "count": min(max_results, 20), "extra_snippets": "true"})
         results = ((response.json().get("web") or {}).get("results")) or []
-        return [SearchResult(url=r["url"], title=r.get("title") or "", snippet=(r.get("description") or "")[:500],
+        return [SearchResult(url=r["url"], title=_plain(r.get("title") or ""),
+                             snippet=_plain(" … ".join([r.get("description") or "", *(r.get("extra_snippets") or [])]))
+                             [:SNIPPET_CHARS],
                              provider=self.name, rank=i, published=r.get("page_age") or r.get("age"))
                 for i, r in enumerate(results) if r.get("url")]
+
+
+def _plain(text: str) -> str:
+    """Brave highlights matches with <strong> tags and HTML entities; evidence needs the plain words."""
+    return html.unescape(re.sub(r"<[^>]+>", "", text)).strip(" …")
 
 
 class SearchUnavailable(Exception):

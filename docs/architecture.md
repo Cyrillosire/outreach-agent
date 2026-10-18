@@ -178,6 +178,32 @@ import/create ──► enqueue research.company (dedupe per company) + research
   Re-research expires a subject's previous facts rather than deleting them, because drafts in Milestone 4 will
   reference them.
 
+### LinkedIn evidence
+
+The prospect's own LinkedIn is first-party evidence about them: their headline and their own words need no outside
+confirmation, so a LinkedIn headline alone confirms the current role. linkedin.com is **never fetched or automated**
+(LinkedIn's terms forbid it, and accounts that automate get restricted). Two sources are used instead:
+
+- **Search index.** Using the profile URL on the record, Tavily/Brave are queried for `site:linkedin.com/in/<slug>`
+  and `site:linkedin.com/posts/<slug>`. A result counts only if its URL carries that exact slug (post URLs end the
+  slug with `_`), so namesakes are excluded without a company-name check. The indexed title and snippet become the
+  source text, and excerpts are verified against it like any page.
+- **Captures.** On the prospect page the user pastes their profile, posts, or activity feed (comments, reposts,
+  reactions) copied from their own browser. Captures are stored per prospect (`captured_for_prospect_id`, deleted
+  with the prospect), chunked, and extracted with a LinkedIn prompt that attributes carefully: `own_post` for what
+  they wrote, `engagement` for others' posts they commented on, reposted, or reacted to. Removing a capture expires
+  the facts that rested only on it and supersedes drafts citing them.
+
+The sensitive-attribute filter applies to LinkedIn too. The writer may quote their own posts and comments, but never
+says it saw their likes or reposts.
+
+### Research status the UI shows
+
+The prospect page derives its state from the queue, not just the stored status: `queued` (with position),
+`researching`, `waiting_for_company` (person done, company still running), `finishing`, or `idle`. A prospect that
+was never queued is idle and offers "Start research" instead of a spinner. Finalization waits for the company only
+while a company job is actually active, so a company left "pending" by a cancelled job can't strand its prospects.
+
 ## Records management and deduplication
 
 - **Exact-name dedupe.** Companies match by domain first, then by exact (case- and whitespace-insensitive) name. A name

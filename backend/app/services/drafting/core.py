@@ -211,6 +211,9 @@ Truthfulness rules (strict):
 - Don't infer what the person is responsible for or doing ("as the CDO overseeing the rollout...") unless the research
   says so. State their role only as the research states it.
 - Put refs only in "claims". Never write ref markers such as (F1) or [C2] in the email text.
+- LinkedIn facts (categories own_post, engagement) are often the best hook. You may refer to something they wrote
+  ("your recent post on ...", "your comment about ..."). For posts they only reacted to or reposted, use the topic as
+  the angle but never say you saw their likes, reactions, or reposts: that reads as surveillance.
 - No flattery, no false familiarity ("I've been following..."), no "hope this finds you well", no guilt-tripping,
   no fake urgency, no exclamation marks, at most one link (only the campaign's link, if provided).
 - Mention the offering only in ways the OFFERING facts support. Respect FORBIDDEN claims absolutely.

@@ -31,3 +31,25 @@ Thumbs.db
 # Never commit prospect data
 *.csv
 !**/tests/fixtures/*.csv
+*.xlsx
+uploads/
+
+# Keys, certificates and OAuth credentials (Gmail / Microsoft app secrets arrive with Milestone 5)
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+client_secret*.json
+*credentials*.json
+service-account*.json
+
+# Database dumps and local logs
+*.dump
+*.sql.gz
+*.sqlite
+*.db
+*.log
+
+# Local tooling
+.claude/

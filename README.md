@@ -109,6 +109,13 @@ Integration tests rebuild the `outreach_test` schema from migrations (upgrade â†
 once per run, and roll back every test's transaction. If Postgres is unreachable they are **skipped
 with a reason**, never reported as passed. CI (`.github/workflows/ci.yml`) runs all of the above.
 
+## Secrets and the public repository
+
+This repository is public. Real keys live only in `.env` (git-ignored); `.env.example` holds placeholders. After
+cloning, run `sh scripts/install-hooks.sh` once: it installs a pre-push hook that runs `scripts/check_secrets.py` and
+refuses to push API keys, private keys, OAuth client secrets, `.env` files, database dumps, or prospect CSVs. CI runs
+the same check.
+
 ## Configuration
 
 All configuration comes from environment variables (see `.env.example`). In production
