@@ -5,11 +5,11 @@ researches each person and company with cited sources, drafts personalized email
 evidence, sends **human-approved** emails through connected Gmail or Microsoft 365 mailboxes, and stops
 follow-ups the moment a prospect replies.
 
-> **Status: Milestone 3 (research engine) complete.** Every imported prospect and their company are researched from
-> public sources by a durable background worker. Facts are stored only with a verbatim excerpt and source link, and
-> evidence sufficiency decides whether a prospect is ready, needs review, or lacks evidence. Drafting, sending, and
-> reply sync are **not built yet**. See [Roadmap](#roadmap). To enable fast research, add provider keys:
-> [docs/provider-setup.md](docs/provider-setup.md).
+> **Status: Milestone 4 (personalization and draft review) complete.** Define what you sell as **offerings**, build
+> **campaigns** from a playbook (product sale, partnership, pilot, service, event, research) with a structured brief,
+> and the drafting engine writes evidence-grounded emails: every claim cites research or offering facts, rules and an
+> AI reviewer check them, and you review, edit, and approve each exact version. Sending, sequences, and reply sync are
+> **not built yet** (M5 and M6). See [Roadmap](#roadmap). Provider keys: [docs/provider-setup.md](docs/provider-setup.md).
 
 ## Repository layout
 
@@ -96,6 +96,7 @@ mypy app                                 # strict type checking
 pytest                                   # unit + integration
 pytest tests/unit                        # unit only; no services needed
 pytest --cov=app --cov-report=term-missing
+LIVE_LLM=1 pytest tests/integration/test_live_drafting.py -s   # opt-in: drafts with the real Groq models
 
 cd ../frontend
 npm run lint
@@ -138,8 +139,8 @@ The full deployment guide and launch checklist are Milestone 7 deliverables.
 | 1 | Foundation: schema, auth, state machines, logging, metrics, Docker, dashboard shell | **Done** |
 | 2 | CSV import, column mapping, validation, dedupe, prospect list/detail, suppression | **Done** |
 | 3 | Research engine: search/extraction adapters, evidence store, durable job queue | **Done** |
-| 4 | Personalization, claim validation, quality scoring, draft review, versioned approval | Next |
-| 5 | Gmail + Microsoft Graph OAuth and sending (verified with real test accounts) | Planned |
+| 4 | Offerings, campaign briefs and playbooks, personalization, claim validation, quality scoring, draft review, versioned approval | **Done** |
+| 5 | Gmail + Microsoft Graph OAuth and sending (verified with real test accounts) | Next |
 | 6 | Durable sequences, reply sync, suppression, ambiguous-send reconciliation | Planned |
 | 7 | Analytics, hardening, deployment docs, staged launch | Planned |
 

@@ -14,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -28,6 +29,7 @@ from app.domain.states import (
     DraftType,
     EmailAccountStatus,
     EmailProvider,
+    Fit,
     MessageDirection,
     OutboundStatus,
     ReplyClassification,
@@ -96,6 +98,12 @@ class EmailDraft(UUIDPrimaryKey, Timestamps, WorkspaceScoped, Base):
     body_text: Mapped[str] = mapped_column(Text, nullable=False)
     content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     personalization_rationale: Mapped[str | None] = mapped_column(Text)
+    # Structured email parts (greeting, opening, observation, problem, value, cta) for section regeneration.
+    sections: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    # Why this prospect/offering/timing: why_organization, why_person, why_offering, why_now, next_step, opportunity.
+    plan: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    overall_score: Mapped[float | None] = mapped_column(Numeric(4, 3))
+    fit: Mapped[Fit | None] = mapped_column(enum_type(Fit))
     quality_scores: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     validation_issues: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     generated_by: Mapped[str] = mapped_column(String(20), nullable=False, default="ai")  # ai | user

@@ -178,6 +178,67 @@ import/create ──► enqueue research.company (dedupe per company) + research
   Re-research expires a subject's previous facts rather than deleting them, because drafts in Milestone 4 will
   reference them.
 
+## Records management and deduplication
+
+- **Exact-name dedupe.** Companies match by domain first, then by exact (case- and whitespace-insensitive) name. A name
+  match without a domain adopts the domain; the same name with *different* domains is kept apart and flagged as a
+  conflict. Contacts with the same exact name at the same company are duplicates: within a file
+  (`duplicate_in_file`), against existing records (`already_exists`), and on manual create/edit (409
+  `prospect_duplicate`). Existing duplicates are never merged automatically; `/duplicates` lists the groups for an
+  explicit merge: the record you keep inherits the others' missing fields, campaign enrollments, drafts, and message
+  history; merged-away contacts' own research is discarded.
+- **Deletion.** Deleting contacts removes their research, drafts, enrollments, messages, and import rows, and cancels
+  their jobs. **Suppressions are kept** (keyed by email), so someone who opted out stays opted out if re-imported.
+  Deleting a company either detaches or also deletes its contacts. Bulk operations are capped at 500 records.
+
+## Campaigns, offerings, and drafting (Milestone 4)
+
+What a campaign sells is modelled explicitly, so every email is written for a defined offer:
+
+```
+Offering (what we sell)          Campaign brief (who, why, ask)          Prospect research (evidence)
+ type: product | service |        motion: product_sale | partnership_     F-refs: verified facts with
+   partnership | pilot | event…     proposal | pilot_offer | service_       verbatim excerpts + sources
+ summary, problems solved           engagement | event_invitation |
+ capabilities ── C-refs             research_or_feedback  (playbook)
+ proof points ── P-refs           goal, why-now, personas (title
+ forbidden claims                   keywords, pains, priorities),
+                                    fit signals, disqualifiers, value
+                                    focus, CTA, style, sender, footer
+              └──────────────────────────────┬────────────────────────────────┘
+                                             ▼
+   writer (gpt-oss-120b → qwen3 → gpt-oss-20b, hosted only) ── strict JSON: fit, rationale, sections, claims[refs]
+                                             ▼
+   tidy (typography, leaked ref markers, duplicate greeting) ─► deterministic validation ─► AI review (gpt-oss-20b)
+                                             ▼
+   score (10 weighted components + gate) ─► regenerate with concrete feedback (≤ 3 attempts, best kept)
+                                             ▼
+   versioned draft + evidence links ─► human review ─► approve exact content hash ─► (M5/M6: send)
+```
+
+- **Offerings and playbooks.** An offering is reusable across campaigns. Each outreach motion has a playbook (writing
+  guidance, default CTA, tone, length, example fit signals and disqualifiers, follow-up days) that pre-fills the brief.
+  A partnership email asks for an exploratory conversation, not a demo; a pilot offer states scope and commitment.
+- **Readiness gate.** A campaign can't draft (or activate) until the brief has an offering, a goal, at least one
+  persona, a specific CTA, a sender name, and a compliance footer. Recommendations (proof points, fit signals,
+  disqualifiers, follow-ups) are shown but don't block.
+- **Grounding.** The model may only use F-refs (research), C-refs (capabilities, problems, differentiators), and P-refs
+  (proof points). Every factual statement must appear in `claims` with refs. Rules then reject unknown or uncited refs,
+  numbers not present in cited material, forbidden or banned phrases, sensitive personal content, unexpected links,
+  unhedged hypotheses, generic emails with no research hook, length overruns, and spam hygiene problems. The
+  greeting, signature, and compliance footer are inserted from the brief, never written by the model.
+- **Fit gate.** On the first email the writer assesses fit against the brief. Weak or disqualified prospects are held
+  (no review tokens spent) with the reason shown; a human can choose "Draft anyway".
+- **Research gating.** Enrolled prospects wait for research; when research finalizes, a hook queues drafting.
+  Prospects needing review or with insufficient evidence get an actionable blocker. Company-only personalization is an
+  explicit brief setting.
+- **Versioning and approval.** Every edit or regeneration creates a new version and supersedes the old one, so an
+  approval never carries over. Approval binds to the SHA-256 of subject + body; drafts with blocking issues need an
+  explicit acknowledgement; bulk approve skips flagged drafts and requires a "reviewed" confirmation. Follow-ups are
+  drafted after the first email is approved (default), up front, or on request.
+- **Jobs.** Drafting runs as `drafts.generate` on the same durable queue as research (one active job per enrollment).
+  Missing LLM configuration is a permanent, clearly-worded failure recorded as the enrollment's blocker.
+
 ## State machines
 
 Defined in `backend/app/domain/states.py`, which has 100% test coverage. Highlights:

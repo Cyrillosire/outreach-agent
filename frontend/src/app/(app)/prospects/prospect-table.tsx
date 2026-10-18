@@ -10,7 +10,7 @@ import { Badge, buttonClass, Cell, DataTable, inputClass, Notice } from "@/compo
 import { apiFetch } from "@/lib/api-client";
 import { ApiError } from "@/lib/envelope";
 import { formatDate, OUTREACH_LABELS, RESEARCH_LABELS } from "@/lib/labels";
-import type { ProspectListItem } from "@/lib/types";
+import type { Campaign, ProspectListItem } from "@/lib/types";
 
 const EDITABLE = [
   { key: "title", label: "Job title" },
@@ -26,7 +26,9 @@ export function ProspectTable({ rows, empty }: { rows: ProspectListItem[]; empty
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { allOnPage, toggle, toggleAll } = useSelectionHelpers(rows, selected, setSelected);
-  const [dialog, setDialog] = useState<null | "edit" | "delete">(null);
+  const [dialog, setDialog] = useState<null | "edit" | "delete" | "campaign">(null);
+  const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
+  const [campaignId, setCampaignId] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ tone: "success" | "danger" | "warning"; text: string } | null>(null);
   const [fields, setFields] = useState<Record<string, { on: boolean; value: string }>>({});
@@ -64,10 +66,33 @@ export function ProspectTable({ rows, empty }: { rows: ProspectListItem[]; empty
     }));
   };
 
+  async function openCampaignDialog() {
+    setDialog("campaign");
+    if (campaigns) return;
+    try {
+      const list = (await apiFetch<Campaign[]>("/campaigns")).filter((c) => c.status !== "cancelled" && c.status !== "completed");
+      setCampaigns(list);
+      setCampaignId(list[0]?.id ?? "");
+    } catch {
+      setCampaigns([]);
+    }
+  }
+
+  const enroll = () => run("Added to campaign", async () => {
+    const outcomes = await apiFetch<{ prospect_id: string; outcome: string; reason: string | null }[]>(
+      `/campaigns/${campaignId}/enroll`, { method: "POST", body: JSON.stringify({ prospect_ids: ids }) });
+    return {
+      affected: outcomes.filter((o) => o.outcome === "enrolled").length,
+      failed: outcomes.filter((o) => o.outcome !== "enrolled")
+        .map((o) => ({ id: o.prospect_id, error: o.reason ?? o.outcome.replaceAll("_", " ") })),
+    };
+  });
+
   return (
     <>
       {result ? <div className="mb-3"><Notice tone={result.tone} title={result.text} /></div> : null}
       <BulkBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <button type="button" className={buttonClass("primary")} onClick={openCampaignDialog}>Add to campaign</button>
         <button type="button" className={buttonClass()} onClick={() => setDialog("edit")}>Edit fields</button>
         <button type="button" className={buttonClass()} disabled={busy}
                 onClick={() => run("Research queued", () => apiFetch<BulkResult>("/prospects/bulk-research", {
@@ -136,6 +161,32 @@ export function ProspectTable({ rows, empty }: { rows: ProspectListItem[]; empty
                    onChange={(e) => setAttr({ ...attr, value: e.target.value })} />
           </div>
         </div>
+      </Modal>
+
+      <Modal open={dialog === "campaign"} title={`Add ${selected.size} contact(s) to a campaign`}
+             onClose={() => setDialog(null)}
+             footer={<>
+               <button type="button" className={buttonClass()} onClick={() => setDialog(null)}>Cancel</button>
+               <button type="button" className={buttonClass("primary")} disabled={busy || !campaignId} onClick={enroll}>
+                 {busy ? "Adding…" : "Add"}
+               </button>
+             </>}>
+        {campaigns === null ? <p className="text-sm text-muted">Loading campaigns…</p>
+          : campaigns.length === 0 ? (
+            <p className="text-sm">No open campaigns. <Link href="/campaigns/new" className="underline">Create one</Link> first.</p>
+          ) : (
+            <>
+              <label htmlFor="enroll-campaign" className="block text-sm font-medium">Campaign</label>
+              <select id="enroll-campaign" className={`${inputClass} mt-1`} value={campaignId}
+                      onChange={(e) => setCampaignId(e.target.value)}>
+                {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}{c.ready ? "" : " (brief incomplete)"}</option>)}
+              </select>
+              <p className="mt-3 text-sm text-muted">
+                Contacts without an email or who opted out are skipped. Drafting starts automatically for contacts whose
+                research is ready; others start research first.
+              </p>
+            </>
+          )}
       </Modal>
 
       <Modal open={dialog === "delete"} title={`Delete ${selected.size} contact(s)?`} onClose={() => setDialog(null)}

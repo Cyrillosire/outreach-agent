@@ -24,6 +24,8 @@ from app.integrations.llm.router import ExhaustionStore, LLMRouter
 from app.integrations.search.providers import BraveSearch, SearchProvider, SearchRouter, TavilySearch
 from app.integrations.web.fetcher import WebFetcher
 from app.jobs.worker import Worker
+from app.services.drafting.pipeline import HANDLERS as DRAFT_HANDLERS
+from app.services.drafting.pipeline import DraftingServices
 from app.services.research.pipeline import HANDLERS, ResearchServices
 from app.services.research.store import reconcile_stuck
 
@@ -57,6 +59,18 @@ def build_research_services(settings: Settings, redis: aioredis.Redis | None) ->
     return ResearchServices(settings=settings, llm=llm, search=search, fetcher=fetcher)
 
 
+def build_drafting_services(settings: Settings, research: ResearchServices) -> DraftingServices:
+    """Drafting and review share provider clients and quota tracking with research, but never use local models:
+    accuracy matters more than cost for anything a prospect will read."""
+    def hosted(chain: str) -> list[tuple[str, str]]:
+        return [c for c in Settings.parse_chain(chain) if c[0] != "ollama"]
+
+    llm = LLMRouter(providers={k: v for k, v in research.llm.providers.items() if k != "ollama"},
+                    exhaustion=research.llm.exhaustion, concurrency=settings.llm_concurrency,
+                    chains={"write": hosted(settings.llm_drafting_chain), "review": hosted(settings.llm_review_chain)})
+    return DraftingServices(settings=settings, llm=llm)
+
+
 def provider_status(settings: Settings) -> dict[str, bool]:
     return {"groq": bool(settings.groq_api_key.get_secret_value()),
             "tavily": bool(settings.tavily_api_key.get_secret_value()),
@@ -69,7 +83,8 @@ async def main() -> None:
     if settings.worker_metrics_port:
         start_http_server(settings.worker_metrics_port, registry=registry)
     redis = aioredis.Redis.from_url(settings.redis_url.get_secret_value(), socket_timeout=5)
-    services = {"research": build_research_services(settings, redis)}
+    research = build_research_services(settings, redis)
+    services = {"research": research, "drafting": build_drafting_services(settings, research)}
     status = provider_status(settings)
     log.info("providers_configured", **status,
              extraction_chain=settings.llm_extraction_chain, search_order=settings.search_provider_order)
@@ -78,7 +93,8 @@ async def main() -> None:
     if not (status["tavily"] or status["brave"]):
         log.warning("search_not_configured", hint="set TAVILY_API_KEY and/or BRAVE_API_KEY")
 
-    worker = Worker(sessions=get_sessionmaker(), settings=settings, handlers=dict(HANDLERS), services=services,
+    worker = Worker(sessions=get_sessionmaker(), settings=settings, handlers={**HANDLERS, **DRAFT_HANDLERS},
+                    services=services,
                     maintenance=[reconcile_stuck])
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()

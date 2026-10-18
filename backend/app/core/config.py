@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     # local model; reasoning-heavy tasks never fall back below the listed models.
     llm_extraction_chain: str = "groq:openai/gpt-oss-20b,groq:qwen/qwen3.8-27b,ollama:qwen3:4b"
     llm_reasoning_chain: str = "groq:openai/gpt-oss-120b,groq:openai/gpt-oss-20b"
+    # Drafting and review use only hosted models: accuracy matters more than cost here (local fallback is excluded).
+    llm_drafting_chain: str = "groq:openai/gpt-oss-120b,groq:qwen/qwen3.8-27b,groq:openai/gpt-oss-20b"
+    llm_review_chain: str = "groq:openai/gpt-oss-20b,groq:qwen/qwen3.8-27b"
+    draft_min_score: float = Field(default=0.7, ge=0, le=1)
+    draft_max_attempts: int = Field(default=3, ge=1, le=5)
     llm_concurrency: int = Field(default=2, ge=1, le=16)
     llm_timeout_seconds: float = Field(default=60, gt=0)
     ollama_timeout_seconds: float = Field(default=600, gt=0)  # local CPU inference is slow

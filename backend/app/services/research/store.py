@@ -293,6 +293,11 @@ def finalize_prospect(db: Session, prospect_id: uuid.UUID) -> str | None:
     set_path(db, Prospect, prospect.id, ResearchStatus.VERIFYING, ResearchStatus(outcome))
     person_run.sufficiency = {"outcome": outcome, "reason": reason, "person": person_suff.as_dict(),
                               "company": company_suff.as_dict() if company_suff else None}
+    # Research is done: let any campaign enrollments that were waiting on it move on to drafting.
+    from app.core.config import get_settings
+    from app.services.campaigns.service import on_research_finalized
+    db.flush()
+    on_research_finalized(db, prospect.id, get_settings())
     return outcome
 
 

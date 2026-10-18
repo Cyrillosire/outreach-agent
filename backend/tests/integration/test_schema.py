@@ -102,8 +102,9 @@ def test_company_domain_unique_per_workspace(db: Session, ws: Workspace) -> None
 
 def test_enum_check_constraint_rejects_unknown_values(db: Session, ws: Workspace) -> None:
     with pytest.raises(IntegrityError, match="ck_campaigns_campaignstatus"), db.begin_nested():
-        db.execute(text("INSERT INTO campaigns (workspace_id, name, timezone, sending_policy, status) "
-                        "VALUES (:w, 'c', 'UTC', '{}', 'yolo')"), {"w": ws.id})
+        db.execute(text("INSERT INTO campaigns (workspace_id, name, timezone, sending_policy, status, motion, brief, "
+                        "brief_version) VALUES (:w, 'c', 'UTC', '{}', 'yolo', 'product_sale', '{}', 1)"),
+                   {"w": ws.id})
 
 
 def test_initial_sequence_step_must_require_approval(db: Session, ws: Workspace) -> None:

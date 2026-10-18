@@ -431,6 +431,34 @@ class DraftType(StrEnum):
     FOLLOW_UP = "follow_up"
 
 
+class OfferingType(StrEnum):
+    PRODUCT = "product"
+    SERVICE = "service"
+    PARTNERSHIP_PROGRAM = "partnership_program"
+    PILOT_PROGRAM = "pilot_program"
+    EVENT = "event"
+    RESEARCH_COLLABORATION = "research_collaboration"
+    OTHER = "other"
+
+
+class OutreachMotion(StrEnum):
+    """How the campaign approaches prospects. Each motion has its own drafting playbook."""
+
+    PRODUCT_SALE = "product_sale"
+    PARTNERSHIP_PROPOSAL = "partnership_proposal"
+    PILOT_OFFER = "pilot_offer"
+    SERVICE_ENGAGEMENT = "service_engagement"
+    EVENT_INVITATION = "event_invitation"
+    RESEARCH_OR_FEEDBACK = "research_or_feedback"
+
+
+class Fit(StrEnum):
+    STRONG = "strong"
+    MODERATE = "moderate"
+    WEAK = "weak"
+    DISQUALIFIED = "disqualified"
+
+
 class ContentPolicy(StrEnum):
     MANUAL_APPROVED = "manual_approved"
     GENERATED_REQUIRES_APPROVAL = "generated_requires_approval"

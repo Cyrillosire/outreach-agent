@@ -21,7 +21,16 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, Timestamps, UUIDPrimaryKey, WorkspaceScoped, enum_type
-from app.domain.states import CampaignStatus, ContentPolicy, DraftType, EnrollmentState, SuppressionReason
+from app.domain.states import (
+    CampaignStatus,
+    ContentPolicy,
+    DraftType,
+    EnrollmentState,
+    Fit,
+    OfferingType,
+    OutreachMotion,
+    SuppressionReason,
+)
 
 
 class Sequence(UUIDPrimaryKey, Timestamps, WorkspaceScoped, Base):
@@ -58,15 +67,39 @@ class SequenceStep(UUIDPrimaryKey, Timestamps, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
+class Offering(UUIDPrimaryKey, Timestamps, WorkspaceScoped, Base):
+    """What we sell (product, service, partnership program, pilot, event...), defined once and reused by campaigns.
+
+    `details` holds the structured, seller-vouched facts the drafts may use (validated by
+    app.services.campaigns.brief.OfferingDetails): problems solved, capabilities, differentiators, proof points,
+    and claims that must never be made.
+    """
+
+    __tablename__ = "offerings"
+    __table_args__ = (UniqueConstraint("workspace_id", "name"),)
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    offering_type: Mapped[OfferingType] = mapped_column(enum_type(OfferingType), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(200))
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
 class Campaign(UUIDPrimaryKey, Timestamps, WorkspaceScoped, Base):
     __tablename__ = "campaigns"
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    objective: Mapped[str | None] = mapped_column(Text)
-    offering_description: Mapped[str | None] = mapped_column(Text)
-    target_persona: Mapped[str | None] = mapped_column(Text)
-    value_proposition: Mapped[str | None] = mapped_column(Text)
-    tone: Mapped[str | None] = mapped_column(String(200))
+    offering_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("offerings.id", ondelete="RESTRICT"), index=True
+    )
+    motion: Mapped[OutreachMotion] = mapped_column(
+        enum_type(OutreachMotion), nullable=False, default=OutreachMotion.PRODUCT_SALE
+    )
+    # Structured campaign brief (app.services.campaigns.brief.CampaignBrief): audience and personas, fit signals,
+    # disqualifiers, call to action, style, sender and compliance footer. Versioned so drafts record what they used.
+    brief: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    brief_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     sequence_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("sequences.id", ondelete="RESTRICT"), index=True
     )
@@ -103,5 +136,9 @@ class CampaignProspect(UUIDPrimaryKey, Timestamps, Base):
     enrolled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     stop_reason: Mapped[SuppressionReason | None] = mapped_column(enum_type(SuppressionReason, "stop_reason"))
+    # Why this contact isn't progressing (e.g. "Waiting for research", "Not drafted: disqualified - ...").
+    blocker: Mapped[str | None] = mapped_column(String(1000))
+    fit: Mapped[Fit | None] = mapped_column(enum_type(Fit))
+    fit_assessment: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # Incremented on every state change; used for optimistic concurrency in multi-field updates.
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

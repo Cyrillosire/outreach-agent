@@ -61,6 +61,18 @@ Status legend: ✅ implemented and tested · 🟡 partially implemented · ⬜ p
   data on the machine.
 - ✅ API keys only in `.env`/secrets; never logged (structlog redaction), never sent to the frontend
 
+## Drafting safety (M4)
+- ✅ Nothing is sent or approved by AI. Approval is a human action bound to the exact content hash; any edit or
+  regeneration creates a new version without approval (tested)
+- ✅ Claims are mechanically checked: every fact must cite research or offering refs, unsupported numbers and
+  forbidden claims are blocking errors, and a second model reviews for unsupported statements (tested with fakes and
+  with live models)
+- ✅ Drafting uses hosted models only (no local fallback): accuracy over cost for anything a prospect reads
+- ✅ Sensitive personal content, false familiarity, fake urgency, and links other than the campaign's are rejected
+- ✅ Weak or disqualified fits are held for a human decision instead of being drafted silently
+- ✅ Internal offering notes and proof-point sources are never sent to the writing model
+- ✅ Compliance footer (sender identity, postal address, opt-out) is required before a campaign can draft
+
 ## Email provider integration (M5–M6)
 - ⬜ OAuth 2.0 authorization-code flow with PKCE, state bound to the session, exact redirect URIs
 - ⬜ Least-privilege scopes requested per enabled feature; granted scopes recorded per account
@@ -83,6 +95,12 @@ operator must confirm:
 - ⬜ Compliance with Google Workspace / Gmail and Microsoft 365 acceptable-use policies and per-account
   sending limits. A connected mailbox does not make a cold campaign compliant
 - ⬜ A privacy notice covering prospect data sourcing, retention, and data-subject rights requests
+
+## Known limitations (Milestone 4)
+- The AI reviewer's judgement varies between runs; drafts it flags stay pending with the reason shown rather than
+  being discarded. Deterministic rules are stable.
+- Hedging is detected by phrasing heuristics (questions, "if…", "may…"); an unusual phrasing can be misjudged.
+- Sending is not connected yet (M5), so activating a campaign reports `no_sending_mailbox`.
 
 ## Known limitations (Milestone 3)
 - The fetcher does not execute JavaScript, so script-rendered sites yield thin text (they show their no-script

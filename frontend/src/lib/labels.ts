@@ -1,5 +1,8 @@
 import type { Tone } from "@/components/ui";
-import type { ImportRowStatus, ImportStatus, OutreachStatus, ResearchStatus } from "@/lib/types";
+import type {
+  CampaignStatus, CtaType, DraftStatus, EnrollmentState, Fit, ImportRowStatus, ImportStatus, OfferingType,
+  OutreachMotion, OutreachStatus, ProofKind, ResearchStatus,
+} from "@/lib/types";
 
 export const RESEARCH_LABELS: Record<ResearchStatus, { label: string; tone: Tone }> = {
   pending: { label: "Pending", tone: "neutral" },
@@ -58,6 +61,112 @@ export const ISSUE_LABELS: Record<string, string> = {
 
 export function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleString() : "—";
+}
+
+// --- Offerings, campaigns, drafts ---------------------------------------------------------------
+
+export const OFFERING_TYPE_LABELS: Record<OfferingType, string> = {
+  product: "Product / software",
+  service: "Service",
+  partnership_program: "Partnership program",
+  pilot_program: "Pilot program",
+  event: "Event",
+  research_collaboration: "Research collaboration",
+  other: "Other",
+};
+
+export const MOTION_LABELS: Record<OutreachMotion, string> = {
+  product_sale: "Product sale",
+  partnership_proposal: "Partnership proposal",
+  pilot_offer: "Pilot offer",
+  service_engagement: "Service engagement",
+  event_invitation: "Event invitation",
+  research_or_feedback: "Research / feedback",
+};
+
+export const PROOF_KIND_LABELS: Record<ProofKind, string> = {
+  metric: "Metric / result",
+  case_study: "Case study",
+  customer: "Named customer",
+  certification: "Certification",
+  award: "Award",
+  other: "Other",
+};
+
+export const CTA_LABELS: Record<CtaType, string> = {
+  book_meeting: "Book a meeting",
+  reply_interest: "Reply if interested",
+  request_pilot: "Start a pilot",
+  share_materials: "Send materials",
+  event_rsvp: "RSVP to an event",
+  referral: "Refer the right person",
+};
+
+export const CAMPAIGN_STATUS_LABELS: Record<CampaignStatus, { label: string; tone: Tone }> = {
+  draft: { label: "Draft", tone: "neutral" },
+  active: { label: "Active", tone: "success" },
+  paused: { label: "Paused", tone: "warning" },
+  completed: { label: "Completed", tone: "info" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+};
+
+export const ENROLLMENT_LABELS: Record<EnrollmentState, { label: string; tone: Tone }> = {
+  enrolled: { label: "Waiting", tone: "neutral" },
+  awaiting_draft: { label: "Drafting", tone: "info" },
+  awaiting_approval: { label: "Needs review", tone: "warning" },
+  scheduled: { label: "Scheduled", tone: "info" },
+  in_sequence: { label: "In sequence", tone: "info" },
+  replied: { label: "Replied", tone: "success" },
+  paused: { label: "Paused", tone: "warning" },
+  completed: { label: "Completed", tone: "success" },
+  suppressed: { label: "Suppressed", tone: "danger" },
+  bounced: { label: "Bounced", tone: "danger" },
+  unsubscribed: { label: "Unsubscribed", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+};
+
+export const DRAFT_STATUS_LABELS: Record<DraftStatus, { label: string; tone: Tone }> = {
+  pending_review: { label: "Needs review", tone: "warning" },
+  approved: { label: "Approved", tone: "success" },
+  rejected: { label: "Rejected", tone: "danger" },
+  superseded: { label: "Superseded", tone: "neutral" },
+};
+
+export const FIT_LABELS: Record<Fit, { label: string; tone: Tone }> = {
+  strong: { label: "Strong fit", tone: "success" },
+  moderate: { label: "Moderate fit", tone: "info" },
+  weak: { label: "Weak fit", tone: "warning" },
+  disqualified: { label: "Disqualified", tone: "danger" },
+};
+
+export const SECTION_ORDER = ["opening", "observation", "problem", "value", "cta"] as const;
+export const SECTION_LABELS: Record<string, string> = {
+  opening: "Opening (research hook)",
+  observation: "Observation",
+  problem: "Problem / hypothesis",
+  value: "Value",
+  cta: "Call to action",
+};
+
+export const SCORE_LABELS: Record<string, string> = {
+  evidence_strength: "Evidence strength",
+  individual_relevance: "Relevance to the person",
+  company_relevance: "Relevance to the company",
+  offering_alignment: "Offering alignment",
+  naturalness: "Natural tone",
+  conciseness: "Conciseness",
+  value_clarity: "Value clarity",
+  cta_quality: "Call to action",
+  claim_safety: "Claim safety",
+  deliverability_hygiene: "Deliverability hygiene",
+};
+
+export function stepLabel(step: number): string {
+  return step === 0 ? "First email" : `Follow-up ${step}`;
+}
+
+export function formatScore(score: number | null | undefined): string {
+  return score === null || score === undefined ? "—" : `${Math.round(score * 100)}`;
 }
 
 export function formatBytes(bytes: number): string {
