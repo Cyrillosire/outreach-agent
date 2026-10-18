@@ -1,0 +1,4 @@
+# Containers and CI run on Linux: keep LF line endings regardless of the checkout OS.
+* text=auto eol=lf
+*.png binary
+*.ico binary
