@@ -8,6 +8,8 @@ import { serverFetchOrNull } from "@/lib/api-server";
 import { RESEARCH_LABELS } from "@/lib/labels";
 import type { CompanyDetail } from "@/lib/types";
 
+import { CompanyActions } from "./company-actions";
+
 export const metadata: Metadata = { title: "Company" };
 
 export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,7 +24,15 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
       <PageHeader
         title={c.name}
         description={c.normalized_domain ?? "No domain known. Company research needs a domain."}
-        actions={<Badge tone={research.tone}>{research.label}</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge tone={research.tone}>{research.label}</Badge>
+            <CompanyActions companyId={c.id} contacts={c.prospects.length} initial={{
+              name: c.name, normalized_domain: c.normalized_domain ?? "", website: c.website ?? "",
+              industry: c.industry ?? "", location: c.location ?? "",
+            }} />
+          </div>
+        }
       />
       <div className="grid gap-6 lg:grid-cols-3">
         <Card title="Details">

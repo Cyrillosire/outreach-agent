@@ -139,17 +139,19 @@ def test_prospect_created_after_validation_is_not_duplicated(authed: AuthedClien
     assert db.scalar(select(func.count()).select_from(Prospect)) == 2
 
 
-def test_possible_duplicate_against_existing_is_flagged_not_merged(authed: AuthedClient, db: Session) -> None:
-    authed.post("/api/v1/prospects", json={"full_name": "Asha Rao", "company_name": "Delta Care"})
-    rows = [["Asha Rao", "", "Delta Care", "", "", "", "", ""]]
+def test_same_name_at_same_company_as_existing_is_not_imported(authed: AuthedClient, db: Session) -> None:
+    existing = authed.post("/api/v1/prospects", json={"full_name": "Asha Rao", "company_name": "Delta Care"})
+    rows = [["asha  RAO", "", "DELTA CARE", "asha@deltacare.example", "", "", "", ""]]
     imp = upload(authed, make_csv(rows)).json()["data"]
-    authed.put(f"/api/v1/imports/{imp['id']}/mapping", json={"mapping": imp["column_mapping"]})
-    issues = authed.get(f"/api/v1/imports/{imp['id']}/rows").json()["data"][0]["issues"]
-    assert "possible_existing_duplicate" in {i["code"] for i in issues}
+    summary = authed.put(f"/api/v1/imports/{imp['id']}/mapping",
+                         json={"mapping": imp["column_mapping"]}).json()["data"]["validation_summary"]
+    assert summary["already_exists"] == 1 and summary["valid"] == 0
+    row = authed.get(f"/api/v1/imports/{imp['id']}/rows").json()["data"][0]
+    assert row["existing_prospect_id"] == existing.json()["data"]["prospect"]["id"]
+    assert "already_exists_name" in {i["code"] for i in row["issues"]}
     authed.post(f"/api/v1/imports/{imp['id']}/commit")
-    assert db.scalar(select(func.count()).select_from(Prospect).where(Prospect.full_name == "Asha Rao")) == 2
-    # Domainless company matched by exact name rather than duplicated.
-    assert db.scalar(select(func.count()).select_from(Company).where(Company.name == "Delta Care")) == 1
+    assert db.scalar(select(func.count()).select_from(Prospect).where(Prospect.full_name.ilike("asha%"))) == 1
+    assert db.scalar(select(func.count()).select_from(Company).where(Company.name.ilike("delta care"))) == 1
 
 
 @pytest.mark.parametrize("name,data,message", [

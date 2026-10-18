@@ -39,12 +39,14 @@ from app.services.imports.mapping import Target
 from app.services.imports.normalize import (
     Issue,
     clean_text,
+    company_name_key,
+    name_key,
     normalize_domain,
     normalize_email,
     normalize_linkedin,
     normalize_website,
 )
-from app.services.imports.validation import validate_row
+from app.services.imports.validation import PersonIdentity, validate_row
 from app.services.suppression import active_suppressions, prospect_suppression_domains
 
 SortKey = Literal["created", "-created", "name", "-name", "company", "-company", "research", "-research"]
@@ -215,6 +217,23 @@ _FIELD_TARGETS = {
 }
 
 
+def ensure_not_duplicate_person(db: Session, user: User, *, full_name: str | None, company_id: uuid.UUID | None,
+                                exclude: uuid.UUID | None = None) -> None:
+    """Reject a second contact with the exact same name at the same company (case/whitespace-insensitive)."""
+    from app.services.imports.service import match_existing_people  # local import avoids a cycle
+
+    if not full_name or not company_id:
+        return
+    company = db.get(Company, company_id)
+    if company is None:
+        return
+    ident = PersonIdentity(name_key(full_name) or "", company_name_key(company.name), company.normalized_domain)
+    hit = match_existing_people(db, user.workspace_id, [(0, ident)], exclude=exclude).get(0)
+    if hit is not None:
+        raise Conflict(f"A contact named {full_name} already exists at {company.name}.", code="prospect_duplicate",
+                       details={"prospect_id": str(hit)})
+
+
 def _issues_payload(issues: list[Issue]) -> list[dict[str, str]]:
     return [i.as_dict() for i in issues]
 
@@ -235,6 +254,7 @@ def create_prospect(
             raise Conflict("A prospect with this email already exists.", code="prospect_exists",
                            details={"prospect_id": str(existing)})
     company_id = _resolve_company(db, user, n)
+    ensure_not_duplicate_person(db, user, full_name=n["full_name"], company_id=company_id)
     merged_attributes = {**attributes}
     if n.get("domain_source"):
         merged_attributes["company_domain_source"] = n["domain_source"]
@@ -318,6 +338,9 @@ def update_prospect(
         if company_id != p.company_id:
             p.company_id = company_id
             changed.append("company")
+
+    if {"full_name", "company"} & set(changed):
+        ensure_not_duplicate_person(db, user, full_name=p.full_name, company_id=p.company_id, exclude=p.id)
 
     if not p.full_name and not p.email_normalized:
         raise ProspectValidationError("A prospect needs at least a name or an email address.",

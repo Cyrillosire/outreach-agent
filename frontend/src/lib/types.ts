@@ -291,3 +291,25 @@ export interface ResearchOverview {
   auto_start: boolean;
   recent_runs: (ResearchRun & { subject_name: string | null })[];
 }
+
+// --- Records management -------------------------------------------------------------------------
+
+export interface CompanyListItem extends CompanyBrief {
+  contacts: number;
+  location: string | null;
+  last_researched_at: string | null;
+  created_at: string;
+}
+
+export interface DuplicateCompanyGroup {
+  key: string;
+  domain_conflict: boolean;
+  records: { id: string; name: string; normalized_domain: string | null; industry: string | null;
+             research_status: ResearchStatus; contacts: number; created_at: string }[];
+}
+
+export interface DuplicateContactGroup {
+  key: string;
+  records: { id: string; full_name: string | null; email: string | null; title: string | null; company_id: string | null;
+             company_name: string | null; research_status: ResearchStatus; created_at: string; source: string }[];
+}

@@ -78,10 +78,23 @@ def test_in_file_duplicates_by_email_keep_first() -> None:
     assert results[1].duplicate_of_row == 2
 
 
-def test_same_name_same_company_is_flagged_not_merged() -> None:
+def test_same_name_same_company_is_a_duplicate() -> None:
     results = validate_rows([(2, row(Name="Jane Doe", Company="Acme")), (3, row(Name="jane  doe", Company="ACME"))], M)
+    assert results[0].status is ImportRowStatus.VALID
+    assert results[1].status is ImportRowStatus.DUPLICATE_IN_FILE and results[1].duplicate_of_row == 2
+    assert "duplicate_name_in_file" in codes(results[1])
+
+
+def test_same_name_same_domain_is_a_duplicate_even_with_different_emails() -> None:
+    results = validate_rows([(2, row(Name="Jane Doe", Email="jane@acme.com")),
+                             (3, row(Name="Jane Doe", Email="j.doe@acme.com"))], M)
+    assert [r.status for r in results] == [ImportRowStatus.VALID, ImportRowStatus.DUPLICATE_IN_FILE]
+
+
+def test_name_without_company_is_never_name_deduplicated() -> None:
+    results = validate_rows([(2, row(Name="Jane Doe", Email="a@gmail.com")),
+                             (3, row(Name="Jane Doe", Email="b@gmail.com"))], M)
     assert all(r.status is ImportRowStatus.VALID for r in results)
-    assert "possible_duplicate" in codes(results[1]) and "possible_duplicate" not in codes(results[0])
 
 
 def test_same_name_different_company_is_not_flagged() -> None:

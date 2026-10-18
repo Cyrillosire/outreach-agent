@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Pagination } from "@/components/pagination";
-import { Badge, buttonClass, Cell, DataTable, EmptyState, inputClass, PageHeader } from "@/components/ui";
+import { buttonClass, EmptyState, inputClass, PageHeader } from "@/components/ui";
 import { serverFetchPage } from "@/lib/api-server";
-import { formatDate, OUTREACH_LABELS, RESEARCH_LABELS } from "@/lib/labels";
+import { RESEARCH_LABELS } from "@/lib/labels";
 import { buildQuery, firstParam, pageParam, type SearchParams } from "@/lib/query";
 import type { PageMeta, ProspectListItem, ResearchStatus } from "@/lib/types";
+
+import { ProspectTable } from "./prospect-table";
 
 export const metadata: Metadata = { title: "Prospects" };
 
@@ -30,6 +32,7 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
         description="Everyone you've imported or added. Each prospect is researched individually before any draft is written."
         actions={
           <div className="flex gap-2">
+            <Link href="/duplicates" className={buttonClass("ghost")}>Review duplicates</Link>
             <Link href="/prospects/new" className={buttonClass("secondary")}>Add prospect</Link>
             <Link href="/prospects/import" className={buttonClass("primary")}>Import CSV</Link>
           </div>
@@ -77,9 +80,9 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
         </p>
       ) : null}
 
-      <DataTable
-        head={["Name", "Title", "Company", "Research", "Outreach", "Next action", "Added"]}
-        empty={prospects.length === 0 ? (
+      <ProspectTable
+        rows={prospects}
+        empty={
           <div className="p-4">
             <EmptyState title={filtered ? "No prospects match these filters" : "No prospects yet"}>
               {filtered ? "Try a broader search." : (
@@ -88,34 +91,8 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
               )}
             </EmptyState>
           </div>
-        ) : null}
-      >
-        {prospects.map((p) => (
-          <tr key={p.id} className="hover:bg-surface-muted/60">
-            <Cell>
-              <Link href={`/prospects/${p.id}`} className="font-medium text-foreground hover:underline">
-                {p.full_name ?? p.email ?? "Unnamed prospect"}
-              </Link>
-              <div className="text-xs text-muted">{p.email ?? <Badge tone="warning">No email</Badge>}</div>
-            </Cell>
-            <Cell className="text-muted">{p.title ?? "—"}</Cell>
-            <Cell>
-              {p.company_id ? (
-                <Link href={`/companies/${p.company_id}`} className="hover:underline">{p.company_name}</Link>
-              ) : <span className="text-muted">—</span>}
-              {p.company_domain ? <div className="text-xs text-muted">{p.company_domain}</div> : null}
-            </Cell>
-            <Cell>
-              <Badge tone={RESEARCH_LABELS[p.research_status].tone}>{RESEARCH_LABELS[p.research_status].label}</Badge>
-            </Cell>
-            <Cell>
-              <Badge tone={OUTREACH_LABELS[p.outreach_status].tone}>{OUTREACH_LABELS[p.outreach_status].label}</Badge>
-            </Cell>
-            <Cell className="whitespace-nowrap text-muted">{p.next_action_at ? formatDate(p.next_action_at) : "—"}</Cell>
-            <Cell className="whitespace-nowrap text-muted">{new Date(p.created_at).toLocaleDateString()}</Cell>
-          </tr>
-        ))}
-      </DataTable>
+        }
+      />
       <Pagination
         page={meta.page} pageSize={meta.page_size} total={meta.total}
         hrefFor={(n) => `/prospects${buildQuery(params, [...FILTER_KEYS, "page"], { page: String(n) })}`}

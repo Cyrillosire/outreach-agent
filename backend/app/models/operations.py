@@ -59,7 +59,7 @@ class ScheduledAction(UUIDPrimaryKey, Timestamps, WorkspaceScoped, Base):
     prospect_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("prospects.id", ondelete="CASCADE"), index=True
     )
-    draft_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("email_drafts.id", ondelete="RESTRICT"))
+    draft_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("email_drafts.id", ondelete="CASCADE"))
     step_order: Mapped[int | None] = mapped_column(Integer)
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     state: Mapped[ScheduledActionState] = mapped_column(

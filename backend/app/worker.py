@@ -25,6 +25,7 @@ from app.integrations.search.providers import BraveSearch, SearchProvider, Searc
 from app.integrations.web.fetcher import WebFetcher
 from app.jobs.worker import Worker
 from app.services.research.pipeline import HANDLERS, ResearchServices
+from app.services.research.store import reconcile_stuck
 
 log = get_logger("worker")
 
@@ -77,7 +78,8 @@ async def main() -> None:
     if not (status["tavily"] or status["brave"]):
         log.warning("search_not_configured", hint="set TAVILY_API_KEY and/or BRAVE_API_KEY")
 
-    worker = Worker(sessions=get_sessionmaker(), settings=settings, handlers=dict(HANDLERS), services=services)
+    worker = Worker(sessions=get_sessionmaker(), settings=settings, handlers=dict(HANDLERS), services=services,
+                    maintenance=[reconcile_stuck])
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):

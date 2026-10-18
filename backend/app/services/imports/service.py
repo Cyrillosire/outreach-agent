@@ -28,11 +28,11 @@ from app.domain.states import (
 )
 from app.models import Company, Prospect, ProspectImport, ProspectImportRow, User
 from app.services import audit
-from app.services.companies import CompanyInput, resolve_companies
+from app.services.companies import CompanyInput, plan_companies, resolve_companies, unify_batch
 from app.services.imports.csv_parser import CsvLimits, ParsedCsv, parse_csv
 from app.services.imports.mapping import MappingError, suggest_mapping, validate_mapping
-from app.services.imports.normalize import Issue, name_key
-from app.services.imports.validation import RowResult, person_key, validate_rows
+from app.services.imports.normalize import Issue, company_name_key, name_key
+from app.services.imports.validation import PersonIdentity, RowResult, person_identity, validate_rows
 
 MAX_FILENAME = 255
 
@@ -91,7 +91,6 @@ def apply_mapping(db: Session, user: User, import_id: uuid.UUID, mapping: dict[s
     ragged = set(imp.validation_summary.get("ragged_rows", []))
     results = validate_rows([(r.row_number, r.raw) for r in rows], resolved, ragged)
     existing_ids = _mark_existing(db, user.workspace_id, results)
-    _flag_existing_name_matches(db, user.workspace_id, results)
 
     by_number = {r.row_number: r for r in rows}
     db.execute(update(ProspectImportRow), [{
@@ -123,47 +122,53 @@ def apply_mapping(db: Session, user: User, import_id: uuid.UUID, mapping: dict[s
 
 
 def _mark_existing(db: Session, workspace_id: uuid.UUID, results: list[RowResult]) -> dict[int, uuid.UUID]:
+    """Mark rows matching an existing contact by email, or by exact name at the same company."""
+    marked: dict[int, uuid.UUID] = {}
     emails = {r.normalized["email_normalized"]: r for r in results
               if r.status is ImportRowStatus.VALID and r.normalized and r.normalized["email_normalized"]}
-    if not emails:
-        return {}
-    found = dict(db.execute(select(Prospect.email_normalized, Prospect.id).where(
-        Prospect.workspace_id == workspace_id, Prospect.email_normalized.in_(list(emails)))).all())
-    marked: dict[int, uuid.UUID] = {}
-    for email, prospect_id in found.items():
-        row = emails[email]
-        row.status = ImportRowStatus.ALREADY_EXISTS
-        row.issues.append(Issue("already_exists", "email",
-                                "A prospect with this email already exists; it will not be changed or duplicated."))
-        marked[row.row_number] = prospect_id
+    if emails:
+        found = dict(db.execute(select(Prospect.email_normalized, Prospect.id).where(
+            Prospect.workspace_id == workspace_id, Prospect.email_normalized.in_(list(emails)))).all())
+        for email, prospect_id in found.items():
+            row = emails[email]
+            row.status = ImportRowStatus.ALREADY_EXISTS
+            row.issues.append(Issue("already_exists", "email",
+                                    "A contact with this email already exists; it will not be changed or duplicated."))
+            marked[row.row_number] = prospect_id
+
+    candidates = [(r, ident) for r in results if r.status is ImportRowStatus.VALID and r.normalized
+                  and (ident := person_identity(r.normalized)) is not None]
+    matches = match_existing_people(db, workspace_id, [(r.row_number, i) for r, i in candidates])
+    for row_number, existing_id in matches.items():
+        r = next(c for c, _ in candidates if c.row_number == row_number)
+        r.status = ImportRowStatus.ALREADY_EXISTS
+        r.issues.append(Issue("already_exists_name", "full_name",
+                              "A contact with the same name at the same company already exists; it will not be "
+                              "duplicated. Edit the existing contact if this row has newer details."))
+        marked[row_number] = existing_id
     return marked
 
 
-def _flag_existing_name_matches(db: Session, workspace_id: uuid.UUID, results: list[RowResult]) -> None:
-    candidates: dict[tuple[str, str], list[RowResult]] = {}
-    for r in results:
-        if r.status is ImportRowStatus.VALID and r.normalized and (key := person_key(r.normalized)):
-            candidates.setdefault(key, []).append(r)
-    if not candidates:
-        return
-    names = list({key[0] for key in candidates})
-    existing = db.execute(
-        select(func.lower(Prospect.full_name), Company.normalized_domain, func.lower(Company.name))
-        .join(Company, Prospect.company_id == Company.id)
-        .where(Prospect.workspace_id == workspace_id, func.lower(Prospect.full_name).in_(names))
-    ).all()
-    existing_keys = set()
-    for full_name, domain, company_name in existing:
-        n = name_key(full_name)
-        if n:
-            existing_keys.add((n, domain or company_name))
-            existing_keys.add((n, company_name))
-    for key, rows in candidates.items():
-        if key in existing_keys:
-            for r in rows:
-                r.issues.append(Issue("possible_existing_duplicate", "full_name",
-                                      "A prospect with the same name already exists at this company. This row will "
-                                      "still be imported; review whether they are the same person."))
+def match_existing_people(db: Session, workspace_id: uuid.UUID, people: list[tuple[int, PersonIdentity]],
+                          exclude: uuid.UUID | None = None) -> dict[int, uuid.UUID]:
+    """Map caller keys to existing prospects with the same name at the same company (see PersonIdentity)."""
+    if not people:
+        return {}
+    names = sorted({p.name for _, p in people})
+    norm_name = func.lower(func.regexp_replace(func.trim(Prospect.full_name), r"\s+", " ", "g"))
+    rows = db.execute(select(Prospect.id, Prospect.full_name, Company.name, Company.normalized_domain)
+                      .outerjoin(Company, Prospect.company_id == Company.id)
+                      .where(Prospect.workspace_id == workspace_id, norm_name.in_(names),
+                             Prospect.id != exclude if exclude else Prospect.id.is_not(None))
+                      .order_by(Prospect.created_at)).all()
+    existing = [(pid, PersonIdentity(name_key(full) or "", company_name_key(cname), domain))
+                for pid, full, cname, domain in rows]
+    out: dict[int, uuid.UUID] = {}
+    for key, ident in people:
+        hit = next((pid for pid, other in existing if ident.same_person(other)), None)
+        if hit is not None:
+            out[key] = hit
+    return out
 
 
 def _summarize(results: list[RowResult]) -> dict[str, Any]:
@@ -189,18 +194,12 @@ def _company_inputs(results: list[RowResult]) -> list[CompanyInput]:
 
 
 def _company_preview(db: Session, workspace_id: uuid.UUID, results: list[RowResult]) -> dict[str, int]:
-    inputs = {i.key: i for i in _company_inputs(results) if i.key}
-    domains = [i.domain for i in inputs.values() if i.domain]
-    existing = 0
-    if domains:
-        existing += db.scalar(select(func.count()).select_from(Company).where(
-            Company.workspace_id == workspace_id, Company.normalized_domain.in_(domains))) or 0
-    names = [k.removeprefix("name:") for k, i in inputs.items() if not i.domain]
-    if names:
-        existing += db.scalar(select(func.count(func.distinct(func.lower(Company.name)))).where(
-            Company.workspace_id == workspace_id, Company.normalized_domain.is_(None),
-            func.lower(Company.name).in_(names))) or 0
-    return {"companies_total": len(inputs), "companies_existing": existing, "companies_new": len(inputs) - existing}
+    inputs = _company_inputs(results)
+    unified = unify_batch(inputs)  # one entry per distinct company in the file
+    plan = plan_companies(db, workspace_id, inputs)
+    existing = len({plan[k] for k in unified if plan.get(k) is not None})
+    new = sum(1 for k in unified if plan.get(k) is None)
+    return {"companies_total": existing + new, "companies_existing": existing, "companies_new": new}
 
 
 def commit_import(db: Session, user: User, import_id: uuid.UUID, settings: Settings | None = None) -> ProspectImport:

@@ -67,7 +67,8 @@ Handler = Callable[[JobContext], Awaitable[dict[str, Any] | None]]
 
 class Worker:
     def __init__(self, *, sessions: sessionmaker[Session], settings: Settings, handlers: dict[str, Handler],
-                 services: dict[str, Any] | None = None, worker_id: str | None = None) -> None:
+                 services: dict[str, Any] | None = None, worker_id: str | None = None,
+                 maintenance: list[Callable[[Session], Any]] | None = None) -> None:
         self.sessions = sessions
         self.settings = settings
         self.handlers = handlers
@@ -75,6 +76,8 @@ class Worker:
         self.worker_id = worker_id or f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
         self._tasks: set[asyncio.Task[None]] = set()
         self._last_reap = 0.0
+        # Periodic self-healing tasks (e.g. finalize research that missed finalization), run with the reaper.
+        self.maintenance = maintenance or []
 
     def _tx(self, fn: Callable[[Session], Any]) -> Any:
         with self.sessions() as s:
@@ -102,6 +105,13 @@ class Worker:
                 jobs_reaped_total.labels("requeued").inc(requeued)
                 jobs_reaped_total.labels("dead").inc(dead)
                 log.warning("leases_reaped", requeued=requeued, dead=dead)
+            for repair in self.maintenance:
+                try:
+                    fixed = await asyncio.to_thread(self._tx, repair)
+                    if fixed:
+                        log.info("maintenance_repaired", task=getattr(repair, "__name__", "repair"), count=fixed)
+                except Exception as exc:  # maintenance must never stop the worker
+                    log.exception("maintenance_failed", error_type=type(exc).__name__)
         free = self.settings.worker_concurrency - len(self._tasks)
         if free <= 0:
             return 0

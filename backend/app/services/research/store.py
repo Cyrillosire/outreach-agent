@@ -259,7 +259,12 @@ def fact_views(db: Session, *, company_id: uuid.UUID | None = None, prospect_id:
 def finalize_prospect(db: Session, prospect_id: uuid.UUID) -> str | None:
     """Decide the prospect's research outcome once its individual run and its company research are both done.
 
-    Safe to call repeatedly and concurrently (row lock); returns the outcome or None while still waiting.
+    Safe to call repeatedly and concurrently; returns the outcome or None while still waiting.
+
+    Concurrency: both research jobs write their own result (run status / company status) and THEN call this,
+    which first locks the prospect row. The second caller therefore always sees the first caller's committed
+    result (READ COMMITTED takes a fresh snapshot per statement). Decisions use only state written in the same
+    transaction as the facts -- never the queue's job state, which is committed separately afterwards.
     """
     prospect = db.scalar(select(Prospect).where(Prospect.id == prospect_id).with_for_update())
     if prospect is None:
@@ -268,12 +273,9 @@ def finalize_prospect(db: Session, prospect_id: uuid.UUID) -> str | None:
                            .order_by(ResearchRun.created_at.desc()).limit(1))
     if person_run is None or person_run.status in (ResearchRunStatus.QUEUED, ResearchRunStatus.RUNNING):
         return None
-    company = db.get(Company, prospect.company_id) if prospect.company_id else None
-    if company is not None:
-        company_job_active = db.scalar(select(Job.id).where(Job.dedupe_key == company_job_key(company.id),
-                                                            Job.state.in_(JOB_ACTIVE)))
-        if company_job_active or company.research_status in _IN_PROGRESS:
-            return None
+    company = db.scalar(select(Company).where(Company.id == prospect.company_id)) if prospect.company_id else None
+    if company is not None and company.research_status in _IN_PROGRESS:
+        return None
 
     if person_run.status is ResearchRunStatus.FAILED or (
             company is not None and company.research_status is ResearchStatus.FAILED_RETRYABLE):
@@ -292,6 +294,24 @@ def finalize_prospect(db: Session, prospect_id: uuid.UUID) -> str | None:
     person_run.sufficiency = {"outcome": outcome, "reason": reason, "person": person_suff.as_dict(),
                               "company": company_suff.as_dict() if company_suff else None}
     return outcome
+
+
+def reconcile_stuck(db: Session, *, limit: int = 200) -> int:
+    """Finalize prospects still marked in-progress although no research job is active for them or their company.
+
+    Recovers from crashes between saving results and finalizing, and from any missed finalization.
+    """
+    active_keys = select(Job.dedupe_key).where(Job.state.in_(JOB_ACTIVE), Job.kind.in_([COMPANY_JOB, PROSPECT_JOB]))
+    candidates = db.scalars(select(Prospect.id).where(
+        Prospect.research_status.in_(_IN_PROGRESS),
+        func.concat("research:prospect:", Prospect.id).not_in(active_keys),
+        or_(Prospect.company_id.is_(None), func.concat("research:company:", Prospect.company_id).not_in(active_keys)),
+    ).limit(limit)).all()
+    finalized = 0
+    for pid in candidates:
+        if finalize_prospect(db, pid) is not None:
+            finalized += 1
+    return finalized
 
 
 def prospects_awaiting_company(db: Session, company_id: uuid.UUID) -> list[uuid.UUID]:

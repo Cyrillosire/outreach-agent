@@ -13,6 +13,8 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview" },
   { href: "/prospects", label: "Prospects" },
+  { href: "/companies", label: "Companies" },
+  { href: "/duplicates", label: "Duplicates" },
   { href: "/research", label: "Research" },
   { href: "/drafts", label: "Draft review", milestone: 4 },
   { href: "/campaigns", label: "Campaigns", milestone: 6 },

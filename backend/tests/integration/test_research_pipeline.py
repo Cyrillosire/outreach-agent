@@ -304,3 +304,44 @@ def test_without_search_company_site_still_researched(ws: tuple[sessionmaker[Ses
         # Leadership page on the company site still confirms her role.
         kinds = {f.kind for f in s.scalars(select(ResearchFact).where(ResearchFact.prospect_id == pid)).all()}
         assert FactKind.VERIFIED_FACT in kinds
+
+
+def test_finalize_ignores_queue_bookkeeping_regression(ws: tuple[sessionmaker[Session], uuid.UUID]) -> None:
+    """Regression (seen in production): the company job's results were saved but its queue row was still 'running'
+    when the individual job finalized, so nobody finalized the prospect."""
+    sessions, wid = ws
+    (pid,) = seed(sessions, wid, [("Dr. Lena Okafor", "lena@northwind.example")])
+    run_worker(sessions, services(FakeLLM(), FakeSearch()))
+    with sessions() as s:
+        prospect = s.get(Prospect, pid)
+        assert prospect is not None
+        prospect.research_status = ResearchStatus.RESEARCHING_INDIVIDUAL  # simulate the missed finalization
+        s.execute(Job.__table__.update().where(Job.workspace_id == wid, Job.kind == "research.company")
+                  .values(state=JobState.RUNNING))  # queue row not yet marked complete
+        s.commit()
+        assert store.finalize_prospect(s, pid) == "ready_for_personalization"
+        s.commit()
+
+
+def test_reconciler_repairs_stuck_prospects(ws: tuple[sessionmaker[Session], uuid.UUID]) -> None:
+    sessions, wid = ws
+    (pid,) = seed(sessions, wid, [("Dr. Lena Okafor", "lena@northwind.example")])
+    run_worker(sessions, services(FakeLLM(), FakeSearch()))
+    with sessions() as s:
+        s.get(Prospect, pid).research_status = ResearchStatus.RESEARCHING_COMPANY  # type: ignore[union-attr]
+        s.commit()
+        assert store.reconcile_stuck(s) >= 1
+        s.commit()
+        assert s.get(Prospect, pid).research_status is ResearchStatus.READY  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize("attempt", range(3))
+def test_concurrent_company_and_individual_jobs_always_finalize(
+        ws: tuple[sessionmaker[Session], uuid.UUID], attempt: int) -> None:
+    sessions, wid = ws
+    okafor, mehta = seed(sessions, wid, [("Dr. Lena Okafor", "lena@northwind.example"),
+                                         ("Arjun Mehta", "arjun@northwind.example")])
+    run_worker(sessions, services(FakeLLM(), FakeSearch()), concurrency=3)  # all three jobs at once
+    with sessions() as s:
+        statuses = {s.get(Prospect, pid).research_status for pid in (okafor, mehta)}  # type: ignore[union-attr]
+        assert statuses <= {ResearchStatus.READY, ResearchStatus.NEEDS_REVIEW}, statuses

@@ -118,8 +118,10 @@ class EmailDraftEvidence(UUIDPrimaryKey, Base):
     draft_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("email_drafts.id", ondelete="CASCADE"), index=True, nullable=False
     )
+    # CASCADE so deleting a contact/company removes its evidence links in the same statement. Services invalidate
+    # (supersede) any draft whose evidence is deleted, so approval never survives losing its evidence.
     fact_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("research_facts.id", ondelete="RESTRICT"), index=True, nullable=False
+        ForeignKey("research_facts.id", ondelete="CASCADE"), index=True, nullable=False
     )
     claim_text: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -156,7 +158,7 @@ class EmailMessage(UUIDPrimaryKey, Timestamps, WorkspaceScoped, Base):
         ForeignKey("campaigns.id", ondelete="SET NULL"), index=True
     )
     draft_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("email_drafts.id", ondelete="RESTRICT"), index=True
+        ForeignKey("email_drafts.id", ondelete="SET NULL"), index=True
     )
     direction: Mapped[MessageDirection] = mapped_column(enum_type(MessageDirection), nullable=False)
     send_idempotency_key: Mapped[str | None] = mapped_column(String(200))

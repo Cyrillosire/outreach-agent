@@ -149,24 +149,46 @@ def validate_rows(rows: list[tuple[int, dict[str, str]]], mapping: dict[str, Tar
         else:
             first_seen[key] = result.row_number
 
-    # Same name at the same company is only *flagged*: two people can share a name, so nothing is merged.
-    seen_people: dict[tuple[str, str], int] = {}
+    # Same full name at the same company is a duplicate contact (user-specified rule): only the first row is kept.
+    seen_people: list[tuple[PersonIdentity, int]] = []
     for result in results:
         if result.status is not ImportRowStatus.VALID or result.normalized is None:
             continue
-        key = person_key(result.normalized)
-        if key is None:
+        ident = person_identity(result.normalized)
+        if ident is None:
             continue
-        if key in seen_people:
-            result.issues.append(Issue("possible_duplicate", "full_name",
-                                       f"Same name and company as row {seen_people[key]}. Both will be imported; "
-                                       "review whether they are the same person."))
+        match = next((row for other, row in seen_people if ident.same_person(other)), None)
+        if match is not None:
+            result.status = ImportRowStatus.DUPLICATE_IN_FILE
+            result.duplicate_of_row = match
+            result.issues.append(Issue("duplicate_name_in_file", "full_name",
+                                       f"Same name and company as row {match}; only the first occurrence is imported."))
         else:
-            seen_people[key] = result.row_number
+            seen_people.append((ident, result.row_number))
     return results
 
 
-def person_key(normalized: dict[str, Any]) -> tuple[str, str] | None:
+@dataclass(frozen=True)
+class PersonIdentity:
+    """Name + company identity. Same person = exact same name (case/space-insensitive) at the same company, where
+    "same company" means the exact same company name, or the same domain when both are known."""
+
+    name: str
+    company_name: str | None
+    domain: str | None
+
+    def same_person(self, other: PersonIdentity) -> bool:
+        if self.name != other.name:
+            return False
+        if self.company_name and other.company_name and self.company_name == other.company_name:
+            return True
+        return bool(self.domain and other.domain and self.domain == other.domain)
+
+
+def person_identity(normalized: dict[str, Any]) -> PersonIdentity | None:
     name = name_key(normalized.get("full_name"))
-    company = normalized.get("company_domain") or company_name_key(normalized.get("company_name"))
-    return (name, company) if name and company else None
+    company = company_name_key(normalized.get("company_name"))
+    domain = normalized.get("company_domain")
+    if not name or not (company or domain):
+        return None
+    return PersonIdentity(name, company, domain)

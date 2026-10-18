@@ -9,7 +9,7 @@ import { serverFetchOrNull } from "@/lib/api-server";
 import { formatDate, RESEARCH_LABELS } from "@/lib/labels";
 import type { ProspectDetail, ProspectResearch } from "@/lib/types";
 
-import { EditProspect, SuppressForm } from "./prospect-actions";
+import { DeleteProspectButton, EditProspect, SuppressForm } from "./prospect-actions";
 
 export const metadata: Metadata = { title: "Prospect" };
 
@@ -58,6 +58,7 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
               company_website: p.company?.website ?? "", industry: p.industry ?? "", country: p.country ?? "",
               location: p.location ?? "",
             }} />
+            <DeleteProspectButton prospectId={p.id} name={p.full_name ?? p.email ?? "this contact"} />
           </div>
         }
       />

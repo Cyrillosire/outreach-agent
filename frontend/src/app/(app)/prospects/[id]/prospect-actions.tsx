@@ -96,3 +96,26 @@ export function SuppressForm({ prospectId, hasEmail, domain }: { prospectId: str
     </Card>
   );
 }
+
+export function DeleteProspectButton({ prospectId, name }: { prospectId: string; name: string }) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  async function remove() {
+    if (!window.confirm(`Permanently delete ${name}? Their research, drafts, campaign memberships and message history `
+      + "are removed. Suppressions (opt-outs) are kept.")) return;
+    setPending(true);
+    try {
+      await apiFetch(`/prospects/${prospectId}`, { method: "DELETE" });
+      router.replace("/prospects");
+      router.refresh();
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : "Delete failed.");
+      setPending(false);
+    }
+  }
+  return (
+    <button type="button" onClick={remove} disabled={pending} className={buttonClass("danger")}>
+      {pending ? "Deleting…" : "Delete"}
+    </button>
+  );
+}
