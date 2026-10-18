@@ -3,6 +3,7 @@
 from app.models.campaigns import Campaign, CampaignProspect, Sequence, SequenceStep
 from app.models.email import EmailAccount, EmailDraft, EmailDraftEvidence, EmailMessage
 from app.models.identity import User, UserSession, Workspace
+from app.models.jobs import Job
 from app.models.operations import AuditLog, IdempotencyKey, ProviderEvent, ScheduledAction, Suppression
 from app.models.prospects import Company, Prospect, ProspectImport, ProspectImportRow
 from app.models.research import ResearchFact, ResearchFactEvidence, ResearchRun, ResearchSource
@@ -17,6 +18,7 @@ __all__ = [
     "EmailDraftEvidence",
     "EmailMessage",
     "IdempotencyKey",
+    "Job",
     "Prospect",
     "ProspectImport",
     "ProspectImportRow",

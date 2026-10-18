@@ -8,6 +8,7 @@ from app.domain.states import (
     EMAIL_ACCOUNT,
     ENROLLMENT,
     IMPORT,
+    JOB,
     OUTBOUND,
     RESEARCH,
     SCHEDULED_ACTION,
@@ -21,7 +22,7 @@ from app.domain.states import (
     StateMachine,
 )
 
-ALL_MACHINES = [RESEARCH, DRAFT, CAMPAIGN, ENROLLMENT, SCHEDULED_ACTION, OUTBOUND, EMAIL_ACCOUNT, IMPORT]
+ALL_MACHINES = [RESEARCH, DRAFT, CAMPAIGN, ENROLLMENT, SCHEDULED_ACTION, OUTBOUND, EMAIL_ACCOUNT, IMPORT, JOB]
 
 
 def _reachable(machine: StateMachine) -> set:  # type: ignore[type-arg]

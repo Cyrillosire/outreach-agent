@@ -5,10 +5,11 @@ researches each person and company with cited sources, drafts personalized email
 evidence, sends **human-approved** emails through connected Gmail or Microsoft 365 mailboxes, and stops
 follow-ups the moment a prospect replies.
 
-> **Status: Milestone 2 (prospect management) complete.** CSV import with column mapping, validation,
-> duplicate detection and provenance; prospect search, detail, editing, and suppression; company
-> deduplication by domain. Research, drafting, sending, and reply sync are **not built yet**. Pages for
-> those sections say so explicitly. See [Roadmap](#roadmap).
+> **Status: Milestone 3 (research engine) complete.** Every imported prospect and their company are researched from
+> public sources by a durable background worker. Facts are stored only with a verbatim excerpt and source link, and
+> evidence sufficiency decides whether a prospect is ready, needs review, or lacks evidence. Drafting, sending, and
+> reply sync are **not built yet**. See [Roadmap](#roadmap). To enable fast research, add provider keys:
+> [docs/provider-setup.md](docs/provider-setup.md).
 
 ## Repository layout
 
@@ -41,13 +42,14 @@ docker-compose.yml  local stack: postgres, redis, backend, frontend
 
 ```bash
 cp .env.example .env                      # placeholders only; nothing secret is required for local dev
-docker compose up -d --build              # postgres, redis, backend (runs migrations), frontend
+docker compose up -d --build              # postgres, redis, backend (runs migrations), worker, frontend
 docker compose exec backend python -m app.cli create-user \
     --email you@example.com --name "Your Name" --role admin --workspace "My Workspace"
 # prompts for a password (min. 12 characters)
 ```
 
 Open http://localhost:3000 and sign in. API docs: http://localhost:8000/api/docs.
+Add research provider keys (Groq, Tavily, Brave) by following [docs/provider-setup.md](docs/provider-setup.md).
 
 ## Local development (hot reload on the host)
 
@@ -69,6 +71,7 @@ python -m app.cli generate-encryption-key  # paste output into CREDENTIAL_ENCRYP
 alembic upgrade head
 python -m app.cli create-user --email you@example.com --name "You" --role admin
 uvicorn app.main:app --reload --port 8000
+python -m app.worker                       # in a second terminal: background research jobs
 ```
 
 **Frontend:**
@@ -134,8 +137,8 @@ The full deployment guide and launch checklist are Milestone 7 deliverables.
 |---|---|---|
 | 1 | Foundation: schema, auth, state machines, logging, metrics, Docker, dashboard shell | **Done** |
 | 2 | CSV import, column mapping, validation, dedupe, prospect list/detail, suppression | **Done** |
-| 3 | Research engine: search/extraction adapters, evidence store, durable job queue | Next |
-| 4 | Personalization, claim validation, quality scoring, draft review, versioned approval | Planned |
+| 3 | Research engine: search/extraction adapters, evidence store, durable job queue | **Done** |
+| 4 | Personalization, claim validation, quality scoring, draft review, versioned approval | Next |
 | 5 | Gmail + Microsoft Graph OAuth and sending (verified with real test accounts) | Planned |
 | 6 | Durable sequences, reply sync, suppression, ambiguous-send reconciliation | Planned |
 | 7 | Analytics, hardening, deployment docs, staged launch | Planned |

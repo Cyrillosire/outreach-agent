@@ -336,6 +336,35 @@ class ImportRowStatus(StrEnum):
     IMPORTED = "imported"
 
 
+class JobState(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    # Permanent failure (non-retryable error, e.g. invalid input or missing configuration).
+    FAILED = "failed"
+    # Retries exhausted.
+    DEAD = "dead"
+    CANCELLED = "cancelled"
+
+
+_J = JobState
+JOB = StateMachine(
+    name="job",
+    states=JobState,
+    initial=_J.QUEUED,
+    transitions={
+        _J.QUEUED: _fs(_J.RUNNING, _J.CANCELLED),
+        # RUNNING -> QUEUED is a scheduled retry or a reclaimed expired lease.
+        _J.RUNNING: _fs(_J.SUCCEEDED, _J.QUEUED, _J.FAILED, _J.DEAD),
+        _J.SUCCEEDED: _fs(),
+        _J.FAILED: _fs(),
+        _J.DEAD: _fs(),
+        _J.CANCELLED: _fs(),
+    },
+)
+JOB_ACTIVE = _fs(_J.QUEUED, _J.RUNNING)
+
+
 class IdempotencyState(StrEnum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"

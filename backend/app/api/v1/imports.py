@@ -101,8 +101,8 @@ def list_rows(
 
 @router.post("/{import_id}/commit", response_model=Envelope[ImportDetailOut],
              summary="Create prospects and companies from valid rows (idempotent)")
-def commit(import_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Envelope[ImportDetailOut]:
-    imp = service.commit_import(db, user, import_id)
+def commit(import_id: uuid.UUID, user: CurrentUser, db: DbSession, settings: AppSettings) -> Envelope[ImportDetailOut]:
+    imp = service.commit_import(db, user, import_id, settings)
     db.commit()
     return Envelope(data=_detail(db, imp))
 

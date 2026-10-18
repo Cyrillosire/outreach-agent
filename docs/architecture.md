@@ -31,8 +31,9 @@ and services but run as separate processes. Microservices are deliberately avoid
 | `app/services/auth`, `audit` | sessions, users, append-only audit log | 1 ✅ |
 | `app/services/imports` | CSV parsing, mapping, validation, normalization, dedupe, provenance | 2 ✅ |
 | `app/services/prospects`, `companies`, `suppression`, `idempotency` | search, edits, company upsert, suppression side effects, Idempotency-Key | 2 ✅ |
-| research | orchestration, company + person research, evidence, sufficiency | 3 |
-| jobs | Postgres-backed durable queue with leases, retries, dead-lettering | 3 |
+| `app/services/research` | orchestration, company + person research, evidence, sufficiency | 3 ✅ |
+| `app/jobs` | Postgres-backed durable queue with leases, retries, dead-lettering; async worker | 3 ✅ |
+| `app/integrations` | Groq/Ollama LLMs, Tavily/Brave search, SSRF-guarded fetcher, extraction | 3 ✅ |
 | personalization | evidence selection, generation, claim validation, scoring, versioning | 4 |
 | providers/gmail, providers/graph | OAuth, send, sync, notifications behind one interface | 5 |
 | sequencing, suppression, sync | scheduling, outbox dispatch, reply detection, suppression | 6 |
@@ -135,6 +136,47 @@ stored response. Reusing a key with a different body returns 422.
 Suppression immediately moves affected campaign enrollments to `suppressed` and cancels every cancellable
 scheduled action in the same transaction. In-flight (`executing`) sends are left to reconciliation.
 Domain suppression of freemail providers is refused.
+
+## Research engine (Milestone 3)
+
+```
+import/create ──► enqueue research.company (dedupe per company) + research.prospect (per person)
+                          │                                   │
+                worker (asyncio, bounded concurrency, leases, retries with backoff, dead-letter)
+                          │                                   │
+   company site crawl + search ──► fetch (SSRF-guarded, robots, cache) ──► main-text extraction
+                          │                                   │
+             passage selection (only relevant chunks reach the LLM; cuts tokens about 5x)
+                          │
+   LLM extraction (strict JSON schema; Groq → other Groq models → local Ollama on quota exhaustion)
+                          │
+   deterministic verification: excerpt must appear VERBATIM in what the model saw; sensitive personal attributes
+   dropped; identity check rejects namesakes; near-duplicates merged; cross-site agreement = corroborated;
+   numeric disagreement = conflicting
+                          │
+   facts + evidence persisted ──► sufficiency rules ──► finalize: ready / needs_review / insufficient / failed
+```
+
+- **Durable queue.** `jobs` table claimed with `FOR UPDATE SKIP LOCKED` under a lease. Heartbeats extend the lease, and
+  expired leases are reclaimed (crash recovery). Results from a worker whose lease was reclaimed are discarded. Retries
+  use exponential backoff with jitter (or the provider's Retry-After), then dead-lettering. One active job per company
+  and per prospect (partial unique index). All queue timing uses the database clock.
+- **Company research is shared**: one job per company, reused while fresh (`RESEARCH_COMPANY_FRESHNESS_DAYS`).
+  Individual research runs concurrently and checks the company's people pages itself (via a shared cache) so it never
+  waits on the company job.
+- **Evidence over model memory.** Search results are only leads; facts come only from pages the fetcher retrieved, with
+  the exact excerpt stored. Web content is delimited with an unpredictable boundary and treated as data, so the model
+  is never told to act on it. The LLM layer has no tools and no access to sending, approval, or credentials.
+- **Sufficiency (deterministic).** Company: at least 3 verified facts covering at least 2 of {what it does, recent
+  developments, priorities/strategy/technology}. Individual: current role confirmed by a source, plus at least one more
+  verified fact. A job title from the CSV is never treated as evidence. Ready only when both are sufficient; one-sided
+  or conflicting evidence goes to human review.
+- **Failure is explicit.** If every model is unavailable, the job retries later; it never reports "no evidence" for an
+  outage. When retries run out the prospect becomes `failed_retryable` (bulk "Retry failed" in the UI). A missing LLM
+  configuration is a permanent, clearly-worded failure.
+- **Freshness.** Facts expire by category (for example procurement 60 days, announcements 120 days, overview 1 year).
+  Re-research expires a subject's previous facts rather than deleting them, because drafts in Milestone 4 will
+  reference them.
 
 ## State machines
 

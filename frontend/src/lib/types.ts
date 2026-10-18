@@ -200,5 +200,94 @@ export interface CompanyDetail extends CompanyBrief {
   description: string | null;
   location: string | null;
   created_at: string;
+  last_researched_at: string | null;
   prospects: Prospect[];
+  facts: Fact[];
+}
+
+// --- Research (Milestone 3) --------------------------------------------------------------------
+
+export type FactKind = "verified_fact" | "inference" | "hypothesis" | "missing" | "conflicting";
+export type FactVerification = "unverified" | "single_source" | "corroborated" | "contradicted" | "rejected";
+export type RunStatus = "queued" | "running" | "succeeded" | "insufficient_evidence" | "failed_retryable" | "failed" | "cancelled";
+
+export interface EvidenceSource {
+  id: string;
+  url: string;
+  title: string | null;
+  publisher: string | null;
+  source_type: string;
+  published_at: string | null;
+  accessed_at: string;
+}
+
+export interface Fact {
+  id: string;
+  category: string;
+  claim: string;
+  kind: FactKind;
+  verification_status: FactVerification;
+  confidence: number;
+  relevance: number;
+  conflict_note: string | null;
+  published_at: string | null;
+  expires_at: string | null;
+  evidence: { source: EvidenceSource; excerpt: string }[];
+}
+
+export interface Sufficiency {
+  level?: "sufficient" | "weak" | "none";
+  verified?: number;
+  corroborated?: number;
+  conflicts?: number;
+  missing?: string[];
+  notes?: string[];
+  sources?: number;
+  outcome?: string;
+  reason?: string;
+}
+
+export interface ResearchRun {
+  id: string;
+  subject_type: "company" | "prospect";
+  company_id: string | null;
+  prospect_id: string | null;
+  status: RunStatus;
+  stage: string | null;
+  attempt_count: number;
+  sufficiency: Sufficiency | null;
+  error: { message?: string; final?: boolean } | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface CompanyResearch {
+  id: string;
+  name: string;
+  normalized_domain: string | null;
+  research_status: ResearchStatus;
+  last_researched_at: string | null;
+  latest_run: ResearchRun | null;
+  facts: Fact[];
+}
+
+export interface ProspectResearch {
+  prospect_id: string;
+  research_status: ResearchStatus;
+  outcome_reason: string | null;
+  individual_run: ResearchRun | null;
+  individual_facts: Fact[];
+  company: CompanyResearch | null;
+  in_progress: boolean;
+}
+
+export interface ResearchOverview {
+  prospects_by_status: Record<ResearchStatus, number>;
+  jobs_by_state: Record<string, number>;
+  providers: Record<"groq" | "ollama" | "tavily" | "brave", boolean>;
+  llm_extraction_chain: string[];
+  search_order: string[];
+  auto_start: boolean;
+  recent_runs: (ResearchRun & { subject_name: string | null })[];
 }

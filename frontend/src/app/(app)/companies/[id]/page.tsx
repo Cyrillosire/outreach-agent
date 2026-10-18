@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { FactList } from "@/components/fact-list";
 import { Badge, Card, Cell, DataTable, PageHeader } from "@/components/ui";
 import { serverFetchOrNull } from "@/lib/api-server";
 import { RESEARCH_LABELS } from "@/lib/labels";
@@ -36,7 +37,14 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
             Company research is done once and shared by everyone here. Each person still gets their own research.
           </p>
         </Card>
-        <div className="lg:col-span-2">
+        <Card title="Research" className="lg:col-span-2">
+          <p className="mb-3 text-xs text-muted">
+            {c.last_researched_at ? `Last researched ${new Date(c.last_researched_at).toLocaleString()}.` : "Not researched yet."}
+          </p>
+          <FactList facts={c.facts} emptyTitle="No verified facts yet"
+                    emptyHint="Research starts automatically when a prospect from this company is added." />
+        </Card>
+        <div className="lg:col-span-3">
           <h2 className="mb-2 text-sm font-semibold">People ({c.prospects.length})</h2>
           <DataTable head={["Name", "Title", "Email", "Research"]}>
             {c.prospects.map((p) => (

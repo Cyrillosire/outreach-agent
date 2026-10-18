@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import AppSettings, CurrentUser, DbSession
 from app.domain.states import ResearchStatus
 from app.schemas.common import ERROR_RESPONSES, Envelope, PageMeta
 from app.schemas.prospects import (
@@ -30,6 +30,8 @@ from app.schemas.prospects import (
 )
 from app.services import idempotency
 from app.services import prospects as prospect_service
+from app.services.research.queries import facts_for
+from app.services.research.store import request_prospect_research
 from app.services.suppression import suppress_prospect
 
 router = APIRouter(tags=["prospects"], responses=ERROR_RESPONSES)
@@ -69,11 +71,15 @@ def create_prospect(
     body: ProspectCreateIn,
     user: CurrentUser,
     db: DbSession,
+    settings: AppSettings,
     idempotency_key: Annotated[str | None, Header(alias=idempotency.HEADER)] = None,
 ) -> JSONResponse:
     def action() -> tuple[int, Envelope[ProspectWriteResult]]:
         prospect, issues = prospect_service.create_prospect(db, user, body.model_dump(exclude={"attributes"}),
                                                             body.attributes)
+        if settings.research_auto_start:
+            request_prospect_research(db, prospect=prospect, settings=settings)
+            db.refresh(prospect)
         return 201, Envelope(data=ProspectWriteResult(prospect=ProspectOut.model_validate(prospect),
                                                       warnings=[i.as_dict() for i in issues]))
 
@@ -131,4 +137,6 @@ def get_company(company_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Enve
     return Envelope(data=CompanyDetailOut(
         **CompanyBrief.model_validate(company).model_dump(), description=company.description,
         location=company.location, created_at=company.created_at,
-        prospects=[ProspectOut.model_validate(p) for p in prospects]))
+        prospects=[ProspectOut.model_validate(p) for p in prospects],
+        facts=facts_for(db, company_id=company.id),
+        last_researched_at=company.last_researched_at))

@@ -60,6 +60,7 @@ class ResearchRun(UUIDPrimaryKey, Timestamps, WorkspaceScoped, Base):
     status: Mapped[ResearchRunStatus] = mapped_column(
         enum_type(ResearchRunStatus), nullable=False, default=ResearchRunStatus.QUEUED
     )
+    job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"), index=True)
     stage: Mapped[str | None] = mapped_column(String(50))
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)

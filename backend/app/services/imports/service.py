@@ -203,7 +203,7 @@ def _company_preview(db: Session, workspace_id: uuid.UUID, results: list[RowResu
     return {"companies_total": len(inputs), "companies_existing": existing, "companies_new": len(inputs) - existing}
 
 
-def commit_import(db: Session, user: User, import_id: uuid.UUID) -> ProspectImport:
+def commit_import(db: Session, user: User, import_id: uuid.UUID, settings: Settings | None = None) -> ProspectImport:
     """Create companies and prospects for every valid row, in one transaction.
 
     Idempotent: committing a completed import returns it unchanged. Concurrent commits serialize on the
@@ -283,12 +283,20 @@ def commit_import(db: Session, user: User, import_id: uuid.UUID) -> ProspectImpo
     if updates:
         db.execute(update(ProspectImportRow), updates)
 
+    research_queued = 0
+    if settings is not None and settings.research_auto_start and created:
+        from app.services.research.store import request_prospect_research
+        for prospect in db.scalars(select(Prospect).where(Prospect.id.in_(list(created.values())))).all():
+            request_prospect_research(db, prospect=prospect, settings=settings)
+            research_queued += 1
+
     transition_row(db, ProspectImport, imp.id, IMPORT, ImportStatus.COMPLETED, column="status",
                    expected_from=ImportStatus.IMPORTING,
                    extra_values={"committed_at": datetime.now(UTC), "validation_summary": {
                        **imp.validation_summary, "imported": len(created),
                        "already_exists": imp.validation_summary.get("already_exists", 0) + len(late_conflicts),
-                       "companies_created": companies.created, "companies_reused": companies.reused}})
+                       "companies_created": companies.created, "companies_reused": companies.reused,
+                       "research_queued": research_queued}})
     db.flush()
     db.refresh(imp)
     audit.record(db, action="import.commit", outcome=AuditOutcome.SUCCESS, actor_type=ActorType.USER,

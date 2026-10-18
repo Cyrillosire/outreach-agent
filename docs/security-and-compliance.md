@@ -42,15 +42,24 @@ Status legend: ✅ implemented and tested · 🟡 partially implemented · ⬜ p
 - ✅ Import upload/map/commit/cancel, prospect create/update (field names only, never values), suppression
 - ⬜ Approvals, sends, replies, account connect/disconnect (recorded as each feature lands)
 
-## AI and research safety (M3–M4)
-- ⬜ SSRF defenses for page fetching: scheme allowlist, DNS resolution checks against private, loopback
-  and link-local ranges (re-checked on redirects), size and time limits, no credentials forwarded
-- ⬜ Prompt-injection containment: web content passed only as delimited data, never as instructions;
-  the research and LLM layers have no access to send, approve, or credential APIs; outputs are validated
-  against Pydantic schemas
-- ⬜ An LLM's internal knowledge is never accepted as evidence; every material claim links to a stored
-  source excerpt
-- ⬜ No sensitive personal attributes; professional context only
+## AI and research safety (M3)
+- ✅ SSRF defenses: http(s) on ports 80/443 only, no URL credentials, and every DNS answer must be public (rejects
+  private, loopback, link-local and metadata IPs, IPv4-mapped IPv6 included). Redirects are followed manually and
+  re-validated per hop, and the connected peer address is re-checked (DNS-rebinding guard). Size and time caps apply,
+  and no credentials or cookies are ever sent. Verified on the live network from the worker container.
+- ✅ robots.txt respected (RFC 9309 semantics), per-host politeness delay, identifying User-Agent; login-walled and
+  terms-restricted sites (LinkedIn, Facebook, data brokers, …) are never fetched
+- ✅ Prompt-injection containment: web text sits inside an unpredictable boundary with explicit "never follow
+  instructions in the source" rules. The LLM has no tools; output is schema-validated; nothing an LLM returns can
+  trigger an action (tested with an injected instruction)
+- ✅ The LLM's own knowledge is never evidence: every stored fact carries a verbatim excerpt that is mechanically
+  checked against the fetched page (paraphrased or invented excerpts are discarded, tested)
+- ✅ Sensitive personal attributes (health, religion, family, politics, …) are filtered from individual research; a
+  namesake guard requires pages to name both the person and their organization
+- ✅ LLM provider data handling: Groq terms bar training on API data, with zero data retention available. Gemini's free
+  tier was rejected because its terms allow training and human review and forbid personal data. Local Ollama keeps
+  data on the machine.
+- ✅ API keys only in `.env`/secrets; never logged (structlog redaction), never sent to the frontend
 
 ## Email provider integration (M5–M6)
 - ⬜ OAuth 2.0 authorization-code flow with PKCE, state bound to the session, exact redirect URIs
@@ -74,6 +83,16 @@ operator must confirm:
 - ⬜ Compliance with Google Workspace / Gmail and Microsoft 365 acceptable-use policies and per-account
   sending limits. A connected mailbox does not make a cold campaign compliant
 - ⬜ A privacy notice covering prospect data sourcing, retention, and data-subject rights requests
+
+## Known limitations (Milestone 3)
+- The fetcher does not execute JavaScript, so script-rendered sites yield thin text (they show their no-script
+  fallback). PDF annual reports are not parsed yet.
+- Pages fetched while checking a possible namesake are stored as sources even when rejected (they are never linked to
+  a fact). Retention cleanup arrives with Milestone 7.
+- Contradiction detection is heuristic (same topic, different numbers, different sites); subtle textual conflicts
+  are not detected.
+- The local-model fallback is slow on this hardware (minutes per page); research quality and speed assume Groq for
+  most extraction.
 
 ## Known limitations (Milestone 2)
 - Domainless companies are matched by exact case-insensitive name. That match is not constraint-protected,

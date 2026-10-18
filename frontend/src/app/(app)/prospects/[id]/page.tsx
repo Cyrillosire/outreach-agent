@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { FactList } from "@/components/fact-list";
+import { ResearchActions } from "@/components/research-actions";
 import { Badge, Card, EmptyState, Notice, PageHeader } from "@/components/ui";
 import { serverFetchOrNull } from "@/lib/api-server";
 import { formatDate, RESEARCH_LABELS } from "@/lib/labels";
-import type { ProspectDetail } from "@/lib/types";
+import type { ProspectDetail, ProspectResearch } from "@/lib/types";
 
 import { EditProspect, SuppressForm } from "./prospect-actions";
 
@@ -23,10 +25,19 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export default async function ProspectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const p = await serverFetchOrNull<ProspectDetail>(`/prospects/${id}`);
-  if (!p) notFound();
+  const [p, r] = await Promise.all([
+    serverFetchOrNull<ProspectDetail>(`/prospects/${id}`),
+    serverFetchOrNull<ProspectResearch>(`/prospects/${id}/research`),
+  ]);
+  if (!p || !r) notFound();
 
   const research = RESEARCH_LABELS[p.research_status];
+  const missing = [
+    ...(r.individual_run?.sufficiency?.missing ?? []).map((m) => `${p.full_name ?? "Individual"}: ${m}`),
+    ...(r.company?.latest_run?.sufficiency?.missing ?? []).map((m) => `${r.company?.name}: ${m}`),
+  ];
+  const notes = [...new Set([...(r.individual_run?.sufficiency?.notes ?? []), ...(r.company?.latest_run?.sufficiency?.notes ?? []),
+    ...(r.individual_run?.error?.message ? [r.individual_run.error.message] : [])])];
   const emailDomain = p.email_normalized?.split("@")[1] ?? null;
   const domain = p.company?.normalized_domain ?? emailDomain;
   const subtitle = [p.title, p.company?.name].filter(Boolean).join(" at ");
@@ -79,10 +90,39 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
           </Card>
 
           <Card title="Research">
-            <EmptyState title={p.research_fact_count ? `${p.research_fact_count} facts collected` : "No research yet"}>
-              The evidence-based research engine arrives in Milestone 3. Each fact will show its source, excerpt, and
-              confidence here.
-            </EmptyState>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <Badge tone={research.tone}>{research.label}</Badge>
+                {r.outcome_reason ? <p className="mt-2 text-sm text-muted">{r.outcome_reason}</p> : null}
+              </div>
+              <ResearchActions prospectId={p.id} inProgress={r.in_progress}
+                               hasResearch={Boolean(r.individual_run || r.company?.latest_run)} />
+            </div>
+            {missing.length ? (
+              <div className="mb-4">
+                <Notice tone="info" title="Not found in public sources">
+                  <ul className="list-disc pl-5">{missing.map((m) => <li key={m}>{m}</li>)}</ul>
+                </Notice>
+              </div>
+            ) : null}
+            {notes.length ? (
+              <ul className="mb-4 space-y-1 text-xs text-muted">{notes.map((n) => <li key={n}>{n}</li>)}</ul>
+            ) : null}
+            <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">About {p.full_name ?? "this person"}</h3>
+            <FactList
+              facts={r.individual_facts}
+              emptyTitle={r.in_progress ? "Researching…" : "No verified facts about this person"}
+              emptyHint={r.in_progress ? undefined : "Nothing about this individual could be confirmed from public sources."}
+            />
+            {r.company ? (
+              <>
+                <h3 className="mb-1 mt-6 text-xs font-medium uppercase tracking-wide text-muted">About {r.company.name}</h3>
+                <FactList
+                  facts={r.company.facts}
+                  emptyTitle={r.in_progress ? "Researching…" : "No verified facts about this company"}
+                />
+              </>
+            ) : null}
           </Card>
 
           <Card title="Drafts, messages and scheduled actions">

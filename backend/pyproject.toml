@@ -20,6 +20,8 @@ dependencies = [
     "prometheus-client==0.26.0",
     "httpx==0.28.1",
     "python-multipart==0.0.32",
+    "trafilatura==2.3.1",
+    "lxml==6.1.3",  # imported directly by app.integrations.web.extract
 ]
 
 [project.optional-dependencies]
@@ -73,3 +75,8 @@ python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 exclude = ["alembic/"]
+
+[[tool.mypy.overrides]]
+# No type stubs are published for these HTML-processing libraries.
+module = ["lxml", "lxml.*", "trafilatura", "trafilatura.*"]
+ignore_missing_imports = true

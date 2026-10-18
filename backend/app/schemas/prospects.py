@@ -23,6 +23,7 @@ from app.domain.states import (
     SuppressionScope,
 )
 from app.schemas.common import ORMModel
+from app.schemas.research import FactOut
 
 _ATTRIBUTE_KEY = re.compile(r"^[a-z0-9_]{1,64}$")
 
@@ -272,4 +273,6 @@ class CompanyDetailOut(CompanyBrief):
     description: str | None
     location: str | None
     created_at: datetime
+    last_researched_at: datetime | None
     prospects: list[ProspectOut]
+    facts: list[FactOut]
