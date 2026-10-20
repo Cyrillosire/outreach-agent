@@ -97,6 +97,24 @@ class Settings(BaseSettings):
     research_person_max_sources: int = Field(default=6, ge=1, le=50)
     research_time_budget_seconds: int = Field(default=900, ge=30)
 
+    # --- Mailboxes (Gmail / Microsoft 365) ------------------------------------------------------------
+    # The dashboard origin users open; OAuth redirect URIs are built from it and must be registered with each
+    # provider exactly. Connect a mailbox from this origin: the callback needs the session cookie set on it.
+    app_public_url: str = "http://localhost:3000"
+    google_client_id: str = ""
+    google_client_secret: SecretStr = SecretStr("")
+    microsoft_client_id: str = ""
+    microsoft_client_secret: SecretStr = SecretStr("")
+    # "common" accepts work/school and personal Microsoft accounts; a tenant id restricts to one organization.
+    microsoft_tenant: str = "common"
+    oauth_state_ttl_minutes: int = Field(default=10, ge=2, le=60)
+    # Per-mailbox cap over any rolling 24 hours, a safety net well under provider limits for cold outreach.
+    mailbox_daily_send_limit: int = Field(default=40, ge=1, le=2000)
+    email_http_timeout_seconds: float = Field(default=30, gt=0)
+
+    def oauth_redirect_uri(self, provider: str) -> str:
+        return f"{self.app_public_url.rstrip('/')}/api/v1/mailboxes/oauth/{provider}/callback"
+
     @property
     def is_production(self) -> bool:
         return self.app_env == Environment.PRODUCTION
@@ -124,6 +142,8 @@ class Settings(BaseSettings):
             problems.append("DATABASE_URL must not use the development default credentials")
         if any(o.startswith("http://") and "localhost" not in o for o in self.allowed_origins):
             problems.append("ALLOWED_ORIGINS must use https in production")
+        if not self.app_public_url.startswith("https://"):
+            problems.append("APP_PUBLIC_URL must use https in production (OAuth redirect URIs)")
         if problems:
             raise ValueError("; ".join(problems))
         return self

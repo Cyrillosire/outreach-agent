@@ -17,6 +17,7 @@ from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.metrics import registry
 from app.db.session import get_sessionmaker
+from app.domain.states import EmailProvider
 from app.integrations.llm.base import LLMProvider
 from app.integrations.llm.groq import GroqProvider
 from app.integrations.llm.ollama import OllamaProvider
@@ -26,6 +27,8 @@ from app.integrations.web.fetcher import WebFetcher
 from app.jobs.worker import Worker
 from app.services.drafting.pipeline import HANDLERS as DRAFT_HANDLERS
 from app.services.drafting.pipeline import DraftingServices
+from app.services.mailboxes import HANDLERS as MAIL_HANDLERS
+from app.services.mailboxes import build_mail_services
 from app.services.research.pipeline import HANDLERS, ResearchServices
 from app.services.research.store import reconcile_stuck
 
@@ -84,8 +87,11 @@ async def main() -> None:
         start_http_server(settings.worker_metrics_port, registry=registry)
     redis = aioredis.Redis.from_url(settings.redis_url.get_secret_value(), socket_timeout=5)
     research = build_research_services(settings, redis)
-    services = {"research": research, "drafting": build_drafting_services(settings, research)}
+    mail = build_mail_services(settings)
+    services = {"research": research, "drafting": build_drafting_services(settings, research), "mail": mail}
     status = provider_status(settings)
+    log.info("mailboxes_configured", gmail=mail.providers[EmailProvider.GMAIL].configured,
+             microsoft=mail.providers[EmailProvider.MICROSOFT].configured, encryption=mail.cipher is not None)
     log.info("providers_configured", **status,
              extraction_chain=settings.llm_extraction_chain, search_order=settings.search_provider_order)
     if not status["groq"]:
@@ -93,7 +99,8 @@ async def main() -> None:
     if not (status["tavily"] or status["brave"]):
         log.warning("search_not_configured", hint="set TAVILY_API_KEY and/or BRAVE_API_KEY")
 
-    worker = Worker(sessions=get_sessionmaker(), settings=settings, handlers={**HANDLERS, **DRAFT_HANDLERS},
+    worker = Worker(sessions=get_sessionmaker(), settings=settings,
+                    handlers={**HANDLERS, **DRAFT_HANDLERS, **MAIL_HANDLERS},
                     services=services,
                     maintenance=[reconcile_stuck])
     stop = asyncio.Event()

@@ -5,11 +5,11 @@ researches each person and company with cited sources, drafts personalized email
 evidence, sends **human-approved** emails through connected Gmail or Microsoft 365 mailboxes, and stops
 follow-ups the moment a prospect replies.
 
-> **Status: Milestone 4 (personalization and draft review) complete.** Define what you sell as **offerings**, build
-> **campaigns** from a playbook (product sale, partnership, pilot, service, event, research) with a structured brief,
-> and the drafting engine writes evidence-grounded emails: every claim cites research or offering facts, rules and an
-> AI reviewer check them, and you review, edit, and approve each exact version. Sending, sequences, and reply sync are
-> **not built yet** (M5 and M6). See [Roadmap](#roadmap). Provider keys: [docs/provider-setup.md](docs/provider-setup.md).
+> **Status: Milestone 5 (mailboxes and sending) built; live verification with real accounts pending.** Connect Gmail
+> or Microsoft 365 mailboxes with OAuth (send-only permission, encrypted tokens) and send approved first emails, with
+> idempotent, re-validated, never-blindly-retried sends. Follow-up scheduling and reply sync are **not built yet**
+> (M6). Setup: research keys [docs/provider-setup.md](docs/provider-setup.md), mailboxes
+> [docs/mailbox-setup.md](docs/mailbox-setup.md). See [Roadmap](#roadmap).
 
 ## Repository layout
 
@@ -147,7 +147,7 @@ The full deployment guide and launch checklist are Milestone 7 deliverables.
 | 2 | CSV import, column mapping, validation, dedupe, prospect list/detail, suppression | **Done** |
 | 3 | Research engine: search/extraction adapters, evidence store, durable job queue | **Done** |
 | 4 | Offerings, campaign briefs and playbooks, personalization, claim validation, quality scoring, draft review, versioned approval | **Done** |
-| 5 | Gmail + Microsoft Graph OAuth and sending (verified with real test accounts) | Next |
+| 5 | Gmail + Microsoft Graph OAuth and sending (verified with real test accounts) | Built; real-account verification pending |
 | 6 | Durable sequences, reply sync, suppression, ambiguous-send reconciliation | Planned |
 | 7 | Analytics, hardening, deployment docs, staged launch | Planned |
 

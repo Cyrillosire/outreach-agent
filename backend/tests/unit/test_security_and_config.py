@@ -45,6 +45,7 @@ def _prod(**overrides: object) -> Settings:
         "credential_encryption_keys": "v1:" + "A" * 43,
         "database_url": "postgresql+psycopg://app:s3cret@db:5432/outreach",
         "allowed_origins": ["https://outreach.example.com"],
+        "app_public_url": "https://outreach.example.com",
     }
     base.update(overrides)
     return Settings(_env_file=None, **base)  # type: ignore[arg-type,call-arg]
@@ -59,6 +60,7 @@ def test_valid_production_settings() -> None:
     ({"credential_encryption_keys": ""}, "CREDENTIAL_ENCRYPTION_KEYS"),
     ({"database_url": "postgresql+psycopg://outreach:outreach@db/outreach"}, "DATABASE_URL"),
     ({"allowed_origins": ["http://outreach.example.com"]}, "https"),
+    ({"app_public_url": "http://outreach.example.com"}, "APP_PUBLIC_URL"),
 ])
 def test_production_rejects_unsafe_settings(override: dict[str, object], message: str) -> None:
     with pytest.raises(ValidationError, match=message):

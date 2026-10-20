@@ -286,6 +286,46 @@ export interface ProspectResearch {
 
 export type ResearchPhase = "queued" | "researching" | "waiting_for_company" | "finishing" | "idle";
 
+// --- Mailboxes and sending (M5) ------------------------------------------------------------------
+
+export type MailProvider = "gmail" | "microsoft";
+export type MailboxStatus = "connected" | "needs_reauth" | "error" | "disconnected";
+export type OutboundStatus = "queued" | "sending" | "provider_accepted" | "unknown" | "failed" | "bounced";
+
+export interface MailProvidersInfo {
+  app_public_url: string;
+  encryption_configured: boolean;
+  daily_send_limit: number;
+  providers: { provider: MailProvider; configured: boolean; redirect_uri: string; scopes: string[] }[];
+}
+
+export interface Mailbox {
+  id: string;
+  provider: MailProvider;
+  email_address: string;
+  display_name: string | null;
+  status: MailboxStatus;
+  granted_scopes: string[];
+  last_error: string | null;
+  connected_at: string | null;
+  sent_last_24h: number;
+}
+
+export interface OutboundMessage {
+  id: string;
+  email_account_id: string;
+  draft_id: string | null;
+  from_address: string;
+  to_addresses: string[];
+  subject: string | null;
+  status: OutboundStatus | null;
+  last_error: string | null;
+  provider_message_id: string | null;
+  internet_message_id: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
 export interface LinkedInCapture {
   id: string;
   kind: "profile" | "post" | "activity";
@@ -427,6 +467,8 @@ export interface Campaign {
   motion: OutreachMotion;
   offering_id: string | null;
   offering_name: string | null;
+  sending_account_id: string | null;
+  sending_account_email: string | null;
   brief: CampaignBrief;
   brief_version: number;
   timezone: string;
@@ -543,5 +585,7 @@ export interface DraftDetail {
               created_at: string; is_current: boolean }[];
   max_words: number;
   enrollment_state: EnrollmentState | null;
+  sending_account_id: string | null;
+  sends: OutboundMessage[];
   created_at: string;
 }

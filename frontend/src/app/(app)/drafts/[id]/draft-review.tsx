@@ -189,7 +189,8 @@ export function DraftReview({ draft }: { draft: DraftDetail }) {
         ) : null}
         {draft.status === "approved" ? (
           <Notice tone="success" title={`Approved ${formatDate(draft.approved_at)}`}>
-            Sending is configured in the next milestone (mailbox connection). Editing creates a new version that needs approval again.
+            {draft.step_order === 0 ? "Send it from the panel above. " : "Follow-ups are sent by the sequence scheduler (Milestone 6). "}
+            Editing creates a new version that needs approval again.
           </Notice>
         ) : null}
       </div>

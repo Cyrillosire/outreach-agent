@@ -1,7 +1,7 @@
 """Import every model so Base.metadata is complete (used by Alembic and tests)."""
 
 from app.models.campaigns import Campaign, CampaignProspect, Offering, Sequence, SequenceStep
-from app.models.email import EmailAccount, EmailDraft, EmailDraftEvidence, EmailMessage
+from app.models.email import EmailAccount, EmailDraft, EmailDraftEvidence, EmailMessage, OAuthState
 from app.models.identity import User, UserSession, Workspace
 from app.models.jobs import Job
 from app.models.operations import AuditLog, IdempotencyKey, ProviderEvent, ScheduledAction, Suppression
@@ -19,6 +19,7 @@ __all__ = [
     "EmailMessage",
     "IdempotencyKey",
     "Job",
+    "OAuthState",
     "Offering",
     "Prospect",
     "ProspectImport",

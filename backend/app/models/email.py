@@ -62,6 +62,26 @@ class EmailAccount(UUIDPrimaryKey, Timestamps, WorkspaceScoped, Base):
     disconnected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class OAuthState(UUIDPrimaryKey, WorkspaceScoped, Base):
+    """A pending mailbox authorization. Single use, short-lived, and bound to the login session that started it,
+    so a callback can't connect a mailbox into anyone else's session (or someone else's mailbox into ours)."""
+
+    __tablename__ = "oauth_states"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_sessions.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    provider: Mapped[EmailProvider] = mapped_column(enum_type(EmailProvider), nullable=False)
+    # SHA-256 of the `state` parameter; the raw value only ever exists in the redirect URL.
+    state_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # PKCE code verifier, encrypted and bound to this row.
+    encrypted_code_verifier: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class EmailDraft(UUIDPrimaryKey, Timestamps, WorkspaceScoped, Base):
     """One row per draft version. Edits and regenerations create a new version; approval is bound to
     a specific version *and* the hash of its content, so any change invalidates it."""

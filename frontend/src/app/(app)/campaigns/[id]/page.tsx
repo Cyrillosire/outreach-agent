@@ -6,7 +6,7 @@ import { Badge, PageHeader, StatTile } from "@/components/ui";
 import { serverFetch, serverFetchOrNull, serverFetchPage } from "@/lib/api-server";
 import { CAMPAIGN_STATUS_LABELS, MOTION_LABELS } from "@/lib/labels";
 import { firstParam, type SearchParams } from "@/lib/query";
-import type { Campaign, Enrollment, Offering, PageMeta, Playbook } from "@/lib/types";
+import type { Campaign, Enrollment, Mailbox, Offering, PageMeta, Playbook } from "@/lib/types";
 
 import { BriefEditor } from "./brief-editor";
 import { CampaignControls } from "./campaign-controls";
@@ -22,10 +22,11 @@ export default async function CampaignPage({ params, searchParams }: {
   const query = await searchParams;
   const campaign = await serverFetchOrNull<Campaign>(`/campaigns/${id}`);
   if (!campaign) notFound();
-  const [offerings, playbooks, enrollments] = await Promise.all([
+  const [offerings, playbooks, enrollments, mailboxes] = await Promise.all([
     serverFetch<Offering[]>("/offerings"),
     serverFetch<Playbook[]>("/campaigns/playbooks"),
     serverFetchPage<Enrollment[], PageMeta>(`/campaigns/${id}/prospects?page_size=200`),
+    serverFetch<Mailbox[]>("/mailboxes"),
   ]);
   const total = enrollments.meta.total;
   const tab = firstParam(query.tab) ?? (campaign.ready && total > 0 ? "contacts" : "brief");
@@ -65,7 +66,7 @@ export default async function CampaignPage({ params, searchParams }: {
 
       {tab === "contacts"
         ? <EnrollmentTable campaign={campaign} rows={enrollments.data} />
-        : <BriefEditor campaign={campaign} offerings={offerings} playbooks={playbooks} />}
+        : <BriefEditor campaign={campaign} offerings={offerings} playbooks={playbooks} mailboxes={mailboxes} />}
     </>
   );
 }

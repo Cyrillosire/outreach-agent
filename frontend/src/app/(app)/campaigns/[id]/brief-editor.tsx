@@ -9,7 +9,9 @@ import { buttonClass, Card, Field, inputClass, Notice } from "@/components/ui";
 import { apiFetch } from "@/lib/api-client";
 import { errorMessage } from "@/lib/errors";
 import { CTA_LABELS, MOTION_LABELS } from "@/lib/labels";
-import type { Campaign, CampaignBrief, CtaType, Offering, OutreachMotion, Persona, Playbook } from "@/lib/types";
+import type {
+  Campaign, CampaignBrief, CtaType, Mailbox, Offering, OutreachMotion, Persona, Playbook,
+} from "@/lib/types";
 
 const EMPTY_PERSONA: Persona = { name: "", title_keywords: [], pains: [], priorities: [], angle: null };
 
@@ -17,13 +19,15 @@ const EMPTY_PERSONA: Persona = { name: "", title_keywords: [], pains: [], priori
  * The campaign brief: everything the writer needs besides the prospect's research. Saving bumps the
  * brief version; drafts already written keep the version they were written from.
  */
-export function BriefEditor({ campaign, offerings, playbooks }: {
+export function BriefEditor({ campaign, offerings, playbooks, mailboxes }: {
   campaign: Campaign;
   offerings: Offering[];
   playbooks: Playbook[];
+  mailboxes: Mailbox[];
 }) {
   const router = useRouter();
   const [name, setName] = useState(campaign.name);
+  const [mailboxId, setMailboxId] = useState(campaign.sending_account_id ?? "");
   const [motion, setMotion] = useState<OutreachMotion>(campaign.motion);
   const [offeringId, setOfferingId] = useState(campaign.offering_id ?? "");
   const [brief, setBrief] = useState<CampaignBrief>(campaign.brief);
@@ -58,7 +62,7 @@ export function BriefEditor({ campaign, offerings, playbooks }: {
       await apiFetch(`/campaigns/${campaign.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          name, motion, offering_id: offeringId || null,
+          name, motion, offering_id: offeringId || null, sending_account_id: mailboxId || null,
           brief: { ...brief, cta: { ...brief.cta, link: brief.cta.link || null } },
         }),
       });
@@ -108,6 +112,21 @@ export function BriefEditor({ campaign, offerings, playbooks }: {
                 <option value="">Not chosen</option>
                 {offerings.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
+            </Field>
+            <Field label="Send from" htmlFor="b-mailbox" hint="The connected mailbox these emails go out from.">
+              {mailboxes.length ? (
+                <select id="b-mailbox" className={inputClass} value={mailboxId}
+                        onChange={(e) => { setMailboxId(e.target.value); setDirty(true); }}>
+                  <option value="">Not chosen</option>
+                  {mailboxes.filter((m) => m.status !== "disconnected" || m.id === mailboxId).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.email_address}{m.status === "connected" ? "" : ` (${m.status.replace("_", " ")})`}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Link href="/settings/mailboxes" className="text-sm underline">Connect a mailbox</Link>
+              )}
             </Field>
             <Field label="Approach" htmlFor="b-motion" hint={playbook?.description}>
               <select id="b-motion" className={inputClass} value={motion}

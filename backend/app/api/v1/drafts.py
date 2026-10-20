@@ -9,9 +9,12 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from app.api.deps import AppSettings, CurrentUser, DbSession
+from app.api.v1.mailboxes import MessageOut
 from app.domain.states import DraftStatus, DraftType
+from app.models import EmailMessage
 from app.schemas.common import ERROR_RESPONSES, Envelope, PageMeta
 from app.services.campaigns.service import brief_of
 from app.services.drafting import service
@@ -73,6 +76,8 @@ class DraftOut(BaseModel):
     versions: list[dict[str, Any]]
     max_words: int
     enrollment_state: str | None
+    sending_account_id: uuid.UUID | None
+    sends: list[dict[str, Any]]
     created_at: datetime
 
 
@@ -117,7 +122,11 @@ def _out(db: DbSession, user: Any, draft_id: uuid.UUID) -> DraftOut:
         generation_metadata={k: v for k, v in (draft.generation_metadata or {}).items() if k != "offering_refs"},
         evidence=d.evidence, versions=d.versions,
         max_words=brief.style.max_words if draft.step_order == 0 else max(50, int(brief.style.max_words * 0.7)),
-        enrollment_state=d.enrollment.state.value if d.enrollment else None, created_at=draft.created_at)
+        enrollment_state=d.enrollment.state.value if d.enrollment else None,
+        sending_account_id=d.campaign.sending_account_id,
+        sends=[MessageOut.of(m).model_dump(mode="json") for m in db.scalars(
+            select(EmailMessage).where(EmailMessage.draft_id == draft.id).order_by(EmailMessage.created_at.desc()))],
+        created_at=draft.created_at)
 
 
 @router.post("/prospects/{prospect_id}/drafts/generate", status_code=202, response_model=Envelope[dict[str, Any]],

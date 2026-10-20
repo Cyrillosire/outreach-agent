@@ -26,6 +26,7 @@ from app.domain.states import (
     ContentPolicy,
     DraftStatus,
     DraftType,
+    EmailAccountStatus,
     EmailVerificationStatus,
     EnrollmentState,
     Fit,
@@ -197,6 +198,15 @@ def update_campaign(db: Session, user: User, campaign_id: uuid.UUID, changes: di
         campaign.offering_id = offering_id
     if changes.get("motion"):
         campaign.motion = OutreachMotion(changes["motion"])
+    if "sending_account_id" in changes:
+        account_id = changes["sending_account_id"]
+        if account_id is not None:
+            account = db.scalar(select(EmailAccount).where(EmailAccount.id == uuid.UUID(str(account_id)),
+                                                           EmailAccount.workspace_id == user.workspace_id))
+            if account is None:
+                raise NotFound("Mailbox not found")
+            account_id = account.id
+        campaign.sending_account_id = account_id
     if "brief" in changes and changes["brief"] is not None:
         try:
             brief = CampaignBrief.model_validate(changes["brief"])
@@ -270,9 +280,11 @@ def change_status(db: Session, user: User, campaign_id: uuid.UUID, target: Campa
                            details=[i.model_dump() for i in items if i.severity == "blocker"])
         mailbox = db.get(EmailAccount, campaign.sending_account_id) if campaign.sending_account_id else None
         if mailbox is None:
-            raise Conflict("Connect a sending mailbox and choose it for this campaign before activating. Mailbox "
-                           "connections arrive in Milestone 5; drafting and approval already work.",
-                           code="no_sending_mailbox")
+            raise Conflict("Choose a sending mailbox for this campaign before activating (connect one under "
+                           "Settings → Mailboxes).", code="no_sending_mailbox")
+        if mailbox.status is not EmailAccountStatus.CONNECTED:
+            raise Conflict(f"The campaign's mailbox {mailbox.email_address} needs to be reconnected before "
+                           "activating.", code="mailbox_not_connected")
     try:
         CAMPAIGN.assert_transition(campaign.status, target, by_human=True)
     except Exception as exc:
@@ -330,7 +342,7 @@ def enroll(db: Session, user: User, campaign_id: uuid.UUID, prospect_ids: list[u
         if pid in existing and existing[pid].state in _ACTIVE_ENROLLMENT:
             results.append(EnrollResult(pid, "already_enrolled"))
             continue
-        reason = _ineligible(db, p, campaign)
+        reason = ineligibility_reason(db, p, campaign)
         if reason:
             results.append(EnrollResult(pid, "skipped", reason))
             continue
@@ -351,7 +363,8 @@ def enroll(db: Session, user: User, campaign_id: uuid.UUID, prospect_ids: list[u
     return results
 
 
-def _ineligible(db: Session, p: Prospect, campaign: Campaign) -> str | None:
+def ineligibility_reason(db: Session, p: Prospect, campaign: Campaign) -> str | None:
+    """Why this contact must not be emailed in this campaign (no email, invalid, suppressed), or None."""
     if not p.email_normalized:
         return "No email address."
     if p.email_verification_status in (EmailVerificationStatus.INVALID, EmailVerificationStatus.BOUNCED):

@@ -255,7 +255,9 @@ OUTBOUND = StateMachine(
     initial=_O.QUEUED,
     transitions={
         _O.QUEUED: _fs(_O.SENDING, _O.FAILED),
-        _O.SENDING: _fs(_O.PROVIDER_ACCEPTED, _O.UNKNOWN, _O.FAILED),
+        # SENDING -> QUEUED only when the provider call provably never reached the provider (connection refused,
+        # or a Graph message confirmed still a draft), so a retry can't duplicate the email.
+        _O.SENDING: _fs(_O.PROVIDER_ACCEPTED, _O.UNKNOWN, _O.FAILED, _O.QUEUED),
         _O.UNKNOWN: _fs(_O.PROVIDER_ACCEPTED, _O.FAILED),
         _O.PROVIDER_ACCEPTED: _fs(_O.BOUNCED),
         _O.FAILED: _fs(),

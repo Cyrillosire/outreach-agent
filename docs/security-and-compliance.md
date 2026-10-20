@@ -85,11 +85,21 @@ Status legend: ✅ implemented and tested · 🟡 partially implemented · ⬜ p
 - ✅ Compliance footer (sender identity, postal address, opt-out) is required before a campaign can draft
 
 ## Email provider integration (M5–M6)
-- ⬜ OAuth 2.0 authorization-code flow with PKCE, state bound to the session, exact redirect URIs
-- ⬜ Least-privilege scopes requested per enabled feature; granted scopes recorded per account
-- ⬜ Refresh-token rotation handling; explicit disconnect revokes and deletes local credentials
-- ⬜ Webhook authenticity: Pub/Sub push auth (OIDC token) for Gmail; `clientState` validation for Graph
-- ⬜ Never claim delivery: `provider_accepted` only; bounces and replies detected via sync
+- ✅ OAuth 2.0 authorization-code flow with PKCE (S256). `state` is random, stored only as a SHA-256 hash, single
+  use, expires in 10 minutes, and bound to the login session and user that started it (a callback completed in any
+  other session is refused, tested). Redirect URIs are built from `APP_PUBLIC_URL` and must match exactly.
+- ✅ Least-privilege scopes: `gmail.send` / `Mail.Send` only (no inbox read in M5). Granted scopes are recorded,
+  and a connection without the send scope is refused.
+- ✅ Refresh tokens encrypted with AES-256-GCM, bound to their mailbox row; access tokens never stored; tokens never
+  returned by the API or logged. Rotated refresh tokens (Microsoft) are re-encrypted and saved.
+- ✅ Disconnect deletes the token and revokes the grant at Google; Microsoft offers no per-app revocation, so the UI
+  links the user to myaccount.microsoft.com. A revoked or expired grant moves the mailbox to "Reconnect needed".
+- ✅ Sending: only human-approved, current, unchanged drafts; suppression, mailbox health, and a per-mailbox daily
+  cap re-checked immediately before the provider call; one send per approved version (idempotency key); an unclear
+  provider outcome is recorded as `unknown` and never retried automatically. Header injection is refused.
+- ✅ Never claim delivery: `provider_accepted` only
+- ⬜ Webhook authenticity for reply sync: Pub/Sub push auth (OIDC token) for Gmail; `clientState` for Graph (M6)
+- ⬜ Bounce and reply detection, reconciliation of `unknown` sends (M6)
 
 ## Lawful outreach: required before launch
 The software enforces mechanics, but legal compliance depends on how it is used. Before sending, the
@@ -106,6 +116,13 @@ operator must confirm:
 - ⬜ Compliance with Google Workspace / Gmail and Microsoft 365 acceptable-use policies and per-account
   sending limits. A connected mailbox does not make a cold campaign compliant
 - ⬜ A privacy notice covering prospect data sourcing, retention, and data-subject rights requests
+
+## Known limitations (Milestone 5)
+- Google apps left in "Testing" (External audience) lose authorization after 7 days; use an Internal app on Google
+  Workspace, or complete Google's verification, for unattended use.
+- `List-Unsubscribe` is a mailto link (replies are processed in M6); one-click HTTPS unsubscribe (RFC 8058) needs a
+  public HTTPS endpoint (M7).
+- Only first emails are sent, one by one; follow-ups are sent by the M6 scheduler (threaded replies).
 
 ## Known limitations (Milestone 4)
 - The AI reviewer's judgement varies between runs; drafts it flags stay pending with the reason shown rather than

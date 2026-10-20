@@ -81,8 +81,11 @@ def claim(db: Session, *, worker_id: str, limit: int, lease_seconds: int,
                   .order_by(Job.priority, Job.run_at).limit(limit).with_for_update(skip_locked=True))
     if kinds:
         candidates = candidates.where(Job.kind.in_(kinds))
+    # A MATERIALIZED CTE runs the LIMIT/SKIP LOCKED pick exactly once. As an `IN (subquery)` the planner may
+    # re-evaluate it, and a worker could claim more jobs than `limit` (seen as 6 claims for limit=4 under load).
+    picked = candidates.cte("picked").prefix_with("MATERIALIZED")
     rows = db.execute(
-        update(Job).where(Job.id.in_(candidates.scalar_subquery()))
+        update(Job).where(Job.id == picked.c.id)
         .values(state=JobState.RUNNING, locked_by=worker_id, attempts=Job.attempts + 1,
                 lease_expires_at=now + timedelta(seconds=lease_seconds))
         .returning(Job.id, Job.kind, Job.payload, Job.workspace_id, Job.attempts, Job.max_attempts)

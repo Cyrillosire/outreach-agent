@@ -13,7 +13,17 @@ from sqlalchemy import func, select
 
 from app.api.deps import AppSettings, CurrentUser, DbSession
 from app.domain.states import CampaignStatus, EnrollmentState, OfferingType, OutreachMotion, ResearchStatus
-from app.models import Campaign, CampaignProspect, Company, EmailDraft, Offering, Prospect, Sequence, SequenceStep
+from app.models import (
+    Campaign,
+    CampaignProspect,
+    Company,
+    EmailAccount,
+    EmailDraft,
+    Offering,
+    Prospect,
+    Sequence,
+    SequenceStep,
+)
 from app.schemas.common import ERROR_RESPONSES, Envelope, ORMModel, PageMeta
 from app.services.campaigns import service
 from app.services.campaigns.brief import CampaignBrief, OfferingDetails, ReadinessItem
@@ -84,6 +94,7 @@ class CampaignPatch(BaseModel):
     offering_id: uuid.UUID | None = None
     brief: CampaignBrief | None = None
     timezone: str | None = Field(default=None, max_length=64)
+    sending_account_id: uuid.UUID | None = None
 
 
 class CampaignOut(BaseModel):
@@ -93,6 +104,8 @@ class CampaignOut(BaseModel):
     motion: OutreachMotion
     offering_id: uuid.UUID | None
     offering_name: str | None
+    sending_account_id: uuid.UUID | None
+    sending_account_email: str | None
     brief: CampaignBrief
     brief_version: int
     timezone: str
@@ -156,9 +169,12 @@ class SequenceOut(BaseModel):
 def _campaign_out(db: DbSession, c: Campaign) -> CampaignOut:
     items = service.campaign_readiness(db, c)
     offering = db.get(Offering, c.offering_id) if c.offering_id else None
+    mailbox = db.get(EmailAccount, c.sending_account_id) if c.sending_account_id else None
     return CampaignOut(
         id=c.id, name=c.name, status=c.status, motion=c.motion, offering_id=c.offering_id,
-        offering_name=offering.name if offering else None, brief=service.brief_of(c), brief_version=c.brief_version,
+        offering_name=offering.name if offering else None, sending_account_id=c.sending_account_id,
+        sending_account_email=mailbox.email_address if mailbox else None,
+        brief=service.brief_of(c), brief_version=c.brief_version,
         timezone=c.timezone, step_days=service.step_days(service.steps_of(db, c)), readiness=items,
         ready=not any(i.severity == "blocker" for i in items), enrollment_counts=service.enrollment_counts(db, c.id),
         draft_counts=service.draft_counts(db, c.id), created_at=c.created_at, updated_at=c.updated_at)

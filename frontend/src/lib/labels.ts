@@ -1,7 +1,7 @@
 import type { Tone } from "@/components/ui";
 import type {
-  CampaignStatus, CtaType, DraftStatus, EnrollmentState, Fit, ImportRowStatus, ImportStatus, OfferingType,
-  OutreachMotion, OutreachStatus, ProofKind, ResearchStatus,
+  CampaignStatus, CtaType, DraftStatus, EnrollmentState, Fit, ImportRowStatus, ImportStatus, MailboxStatus,
+  MailProvider, OfferingType, OutboundStatus, OutreachMotion, OutreachStatus, ProofKind, ResearchStatus,
 } from "@/lib/types";
 
 export const RESEARCH_LABELS: Record<ResearchStatus, { label: string; tone: Tone }> = {
@@ -159,6 +159,24 @@ export const SCORE_LABELS: Record<string, string> = {
   cta_quality: "Call to action",
   claim_safety: "Claim safety",
   deliverability_hygiene: "Deliverability hygiene",
+};
+
+export const PROVIDER_LABELS: Record<MailProvider, string> = { gmail: "Gmail / Google Workspace", microsoft: "Microsoft 365 / Outlook" };
+
+export const MAILBOX_STATUS_LABELS: Record<MailboxStatus, { label: string; tone: Tone }> = {
+  connected: { label: "Connected", tone: "success" },
+  needs_reauth: { label: "Reconnect needed", tone: "danger" },
+  error: { label: "Error", tone: "danger" },
+  disconnected: { label: "Disconnected", tone: "neutral" },
+};
+
+export const OUTBOUND_LABELS: Record<OutboundStatus, { label: string; tone: Tone; hint?: string }> = {
+  queued: { label: "Queued", tone: "info" },
+  sending: { label: "Sending", tone: "info" },
+  provider_accepted: { label: "Sent", tone: "success", hint: "Accepted by the mail provider. Delivery isn't guaranteed; bounces are detected later." },
+  unknown: { label: "Outcome unknown", tone: "warning", hint: "The provider didn't confirm. It was not retried, to avoid a duplicate. Check the mailbox's Sent folder." },
+  failed: { label: "Not sent", tone: "danger" },
+  bounced: { label: "Bounced", tone: "danger" },
 };
 
 export function stepLabel(step: number): string {

@@ -3,17 +3,21 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Badge, Notice, PageHeader } from "@/components/ui";
-import { serverFetchOrNull } from "@/lib/api-server";
+import { serverFetch, serverFetchOrNull } from "@/lib/api-server";
 import { DRAFT_STATUS_LABELS, stepLabel } from "@/lib/labels";
-import type { DraftDetail } from "@/lib/types";
+import type { DraftDetail, Mailbox } from "@/lib/types";
 
 import { DraftReview } from "./draft-review";
+import { SendPanel } from "./send-panel";
 
 export const metadata: Metadata = { title: "Draft" };
 
 export default async function DraftPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const draft = await serverFetchOrNull<DraftDetail>(`/drafts/${id}`);
+  const [draft, mailboxes] = await Promise.all([
+    serverFetchOrNull<DraftDetail>(`/drafts/${id}`),
+    serverFetch<Mailbox[]>("/mailboxes"),
+  ]);
   if (!draft) notFound();
   const status = DRAFT_STATUS_LABELS[draft.status];
   const current = draft.versions.find((v) => v.is_current);
@@ -37,6 +41,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
           </Notice>
         </div>
       ) : null}
+      <div className="mb-4"><SendPanel draft={draft} mailboxes={mailboxes} /></div>
       <DraftReview key={draft.id} draft={draft} />
     </>
   );

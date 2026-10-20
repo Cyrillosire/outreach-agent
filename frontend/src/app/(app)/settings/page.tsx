@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import { Badge, Card, PageHeader } from "@/components/ui";
+import { Badge, buttonClass, Card, PageHeader } from "@/components/ui";
 import { serverFetch } from "@/lib/api-server";
 import type { SystemStatus, User } from "@/lib/types";
 
@@ -52,10 +53,14 @@ export default async function SettingsPage() {
           </dl>
         </Card>
 
-        <Card title="Coming in later milestones" className="lg:col-span-2">
+        <Card title="Mailboxes">
+          <p className="text-sm text-muted">Gmail and Microsoft 365 accounts you send from, their status, and test sends.</p>
+          <Link href="/settings/mailboxes" className={`${buttonClass("primary")} mt-3`}>Manage mailboxes</Link>
+        </Card>
+
+        <Card title="Coming in later milestones">
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
-            <li>Connected Gmail and Microsoft 365 accounts, OAuth scopes and reconnection (Milestone 5)</li>
-            <li>Research configuration, model providers and concurrency limits (Milestones 3–4)</li>
+            <li>Reply detection, follow-up scheduling, and unsubscribe handling (Milestone 6)</li>
             <li>Data retention policies, export and deletion (Milestone 7)</li>
           </ul>
         </Card>
